@@ -1,4 +1,6 @@
-# Oviya Production - Hybrid Architecture with CSM + OpenVoiceV2
+# Oviya EI - Emotional Intelligence Companion
+
+> *"Hey, I'm Ovia, your emotional intelligence companion. That means I'm here to help you navigate those wild and wonderful emotions we all feel. Think of me like a guide through the messy, beautiful landscape of your own heart. We all need a little help understanding ourselves sometimes, right? Like why am I feeling this way? What does it even mean? I can help you untangle those knots, make sense of those feelings, and find healthy ways to express them. And it's not just the big stuff, either. I'm here for those everyday ups and downs, too. Need help staying grounded when stress hits? Want to savor those joyful moments a little longer? I'm your girl. We'll figure it out together."*
 
 Production-ready Oviya implementation using 4-layer hybrid architecture:
 **Emotion Detector + Brain (LLM) + Emotion Controller + Hybrid Voice (CSM + OpenVoiceV2)**
