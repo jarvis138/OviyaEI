@@ -1,0 +1,80 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Outputs
+output/
+*.wav
+*.mp3
+*.mp4
+temp/
+logs/
+*.log
+
+# Models and data
+external/
+models/
+checkpoints/
+data/voice_samples/*.wav
+data/emotion_embeddings/*.npy
+
+# Environment variables
+.env
+*.env
+
+# Cache
+.cache/
+*.cache
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Node modules (for any web components)
+node_modules/
+package-lock.json
+
+# Archive
+archive/
+
+# Keep structure but ignore generated files
+!data/voice_samples/README.md
+!data/emotion_embeddings/.gitkeep
+!output/.gitkeep
+!temp/.gitkeep
+

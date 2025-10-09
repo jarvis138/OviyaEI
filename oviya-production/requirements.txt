@@ -1,0 +1,29 @@
+# Oviya Production Requirements
+
+# Core dependencies
+torch>=2.0.0
+torchaudio>=2.0.0
+numpy>=1.24.0
+
+# LLM integration
+requests>=2.31.0
+
+# Audio processing
+soundfile>=0.12.1
+
+# Hugging Face integration (for OpenVoiceV2)
+huggingface-hub>=0.20.0
+transformers>=4.40.0
+
+# OpenVoiceV2 will be installed separately via:
+# git clone https://github.com/myshell-ai/OpenVoice.git external/OpenVoice
+# cd external/OpenVoice && pip install -e .
+
+# Optional: For development/testing
+pytest>=7.4.0
+pytest-cov>=4.1.0
+
+# Optional: For audio analysis
+librosa>=0.10.0
+scipy>=1.10.0
+

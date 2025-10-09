@@ -1,0 +1,79 @@
+{
+  "emotion_labels": {
+    "calm_supportive": {
+      "style_token": "#calm",
+      "pitch_scale": 0.9,
+      "rate_scale": 0.9,
+      "energy_scale": 0.8,
+      "prosody_hint": "soft, long pauses",
+      "description": "Gentle, soothing, reassuring tone"
+    },
+    "empathetic_sad": {
+      "style_token": "#sad",
+      "pitch_scale": 0.85,
+      "rate_scale": 0.85,
+      "energy_scale": 0.6,
+      "prosody_hint": "slight downward intonation",
+      "description": "Warm, compassionate, understanding"
+    },
+    "joyful_excited": {
+      "style_token": "#joy",
+      "pitch_scale": 1.15,
+      "rate_scale": 1.05,
+      "energy_scale": 1.2,
+      "prosody_hint": "brighter, wider pitch range",
+      "description": "Happy, enthusiastic, celebratory"
+    },
+    "playful": {
+      "style_token": "#playful",
+      "pitch_scale": 1.05,
+      "rate_scale": 1.1,
+      "energy_scale": 1.0,
+      "prosody_hint": "light staccato, smiles",
+      "description": "Fun, lighthearted, teasing"
+    },
+    "confident": {
+      "style_token": "#confident",
+      "pitch_scale": 1.0,
+      "rate_scale": 1.0,
+      "energy_scale": 1.1,
+      "prosody_hint": "steady, clear articulation",
+      "description": "Assured, strong, capable"
+    },
+    "concerned_anxious": {
+      "style_token": "#anxious",
+      "pitch_scale": 0.95,
+      "rate_scale": 0.95,
+      "energy_scale": 0.9,
+      "prosody_hint": "breathy, short phrases",
+      "description": "Worried, caring, attentive"
+    },
+    "angry_firm": {
+      "style_token": "#firm",
+      "pitch_scale": 0.95,
+      "rate_scale": 1.0,
+      "energy_scale": 1.15,
+      "prosody_hint": "controlled intensity",
+      "description": "Strong, boundary-setting, serious"
+    },
+    "neutral": {
+      "style_token": "#neutral",
+      "pitch_scale": 1.0,
+      "rate_scale": 1.0,
+      "energy_scale": 1.0,
+      "prosody_hint": "natural, conversational",
+      "description": "Balanced, friendly, warm"
+    }
+  },
+  "emotion_keywords": {
+    "calm_supportive": ["stressed", "overwhelmed", "anxious", "worried", "nervous", "scared"],
+    "empathetic_sad": ["sad", "depressed", "down", "lonely", "hurt", "alone", "crying"],
+    "joyful_excited": ["excited", "happy", "great", "amazing", "wonderful", "promoted", "fantastic"],
+    "playful": ["funny", "laugh", "joke", "silly", "fun"],
+    "confident": ["can", "will", "strong", "capable", "confident"],
+    "concerned_anxious": ["concern", "worry", "issue", "problem"],
+    "angry_firm": ["angry", "mad", "frustrated", "furious", "annoyed"],
+    "neutral": []
+  }
+}
+
