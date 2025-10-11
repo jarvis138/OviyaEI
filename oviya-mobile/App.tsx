@@ -38,7 +38,7 @@ export default function App() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer rpa_BF2U0ZVFNBAQQ8MESUG5DE3Y5A9GVR10ZBDGHYPJ9om5co'
+          'Authorization': 'Bearer YOUR_RUNPOD_API_KEY_HERE'
         },
         body: JSON.stringify({
           input: {
@@ -188,7 +188,7 @@ export default function App() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer rpa_BF2U0ZVFNBAQQ8MESUG5DE3Y5A9GVR10ZBDGHYPJ9om5co'
+          'Authorization': 'Bearer YOUR_RUNPOD_API_KEY_HERE'
         },
         body: JSON.stringify({
           input: {
@@ -207,7 +207,7 @@ export default function App() {
           try {
             const statusResponse = await fetch(`https://api.runpod.ai/v2/9sy1v6xggdjiur/status/${result.id}`, {
               headers: {
-                'Authorization': 'Bearer rpa_BF2U0ZVFNBAQQ8MESUG5DE3Y5A9GVR10ZBDGHYPJ9om5co'
+                'Authorization': 'Bearer YOUR_RUNPOD_API_KEY_HERE'
               }
             });
             
