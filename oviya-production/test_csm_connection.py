@@ -13,7 +13,7 @@ import torchaudio
 from pathlib import Path
 
 
-def test_csm_connection(csm_url: str = "http://localhost:6006/generate"):
+def test_csm_connection(csm_url: str = "http://45.78.17.160:6006/generate"):
     """Test CSM service connection."""
     print("🧪 Testing CSM Connection")
     print("=" * 40)
@@ -128,8 +128,8 @@ def main():
     print("🚀 CSM Connection Test")
     print("=" * 50)
     
-    # Test local connection (if running on Vast.ai)
-    test_csm_connection("http://localhost:6006/generate")
+    # Test Vast.ai connection
+    test_csm_connection("http://45.78.17.160:6006/generate")
     
     print("\n" + "=" * 50)
     print("✅ CSM connection test completed!")
@@ -139,3 +139,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

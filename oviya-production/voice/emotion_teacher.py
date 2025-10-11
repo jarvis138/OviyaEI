@@ -1,250 +1,228 @@
 """
-OpenVoice V2 Emotion Teacher
+OpenVoice Emotion Teacher
 
-Extracts emotional reference embeddings from OpenVoice V2's built-in style library.
-This provides the "teacher" emotional references for CSM to learn from.
+Wraps OpenVoiceV2 to extract emotional reference audio.
+These references are used to condition CSM for emotionally expressive speech.
 """
 
 import torch
 import torchaudio
-import numpy as np
+import sys
 from pathlib import Path
 from typing import Dict, Tuple, Optional
-import json
 
 
 class OpenVoiceEmotionTeacher:
     """
-    Wrapper for OpenVoice V2 to extract emotional references.
-    Uses OpenVoice V2's built-in emotion reference library.
+    Teacher model using OpenVoiceV2 to provide emotional references.
     
-    This is the "teacher" model that provides emotional examples
-    for CSM (the "student") to reproduce.
+    This class extracts or generates emotional audio samples that serve
+    as reference context for CSM generation.
     """
     
-    def __init__(self, model_path: str = "external/OpenVoice"):
-        """Initialize OpenVoice V2 emotion teacher."""
-        self.model_path = Path(model_path)
+    def __init__(
+        self,
+        openvoice_path: str = "external/OpenVoice",
+        device: str = "cuda" if torch.cuda.is_available() else "cpu"
+    ):
+        """
+        Initialize OpenVoice teacher.
+        
+        Args:
+            openvoice_path: Path to OpenVoice repository
+            device: Device to use for inference
+        """
+        self.device = device
+        self.openvoice_path = Path(openvoice_path)
+        self.model = None
         self.sample_rate = 24000
         
-        # OpenVoice V2 emotion reference library paths
-        # These are the built-in emotional style references
-        self.emotion_refs = {
-            "calm_supportive": "checkpoints/base_speakers/ses/calm.wav",
-            "empathetic_sad": "checkpoints/base_speakers/ses/sad.wav",
-            "joyful_excited": "checkpoints/base_speakers/ses/happy.wav",
-            "playful": "checkpoints/base_speakers/ses/cheerful.wav",
-            "confident": "checkpoints/base_speakers/ses/confident.wav",
-            "concerned_anxious": "checkpoints/base_speakers/ses/worried.wav",
-            "angry_firm": "checkpoints/base_speakers/ses/angry.wav",
-            "neutral": "checkpoints/base_speakers/ses/neutral.wav"
+        # Emotion-to-text mapping for reference generation
+        self.emotion_texts = {
+            "calm_supportive": "Take a deep breath. Everything will be okay.",
+            "empathetic_sad": "I'm so sorry you're going through this.",
+            "joyful_excited": "That's amazing! I'm so happy for you!",
+            "playful": "Hey there! This is going to be fun!",
+            "confident": "You've got this. I believe in you.",
+            "concerned_anxious": "Are you okay? I'm here if you need me.",
+            "angry_firm": "That's not acceptable. This needs to stop.",
+            "neutral": "Hello. How can I help you today?"
         }
         
-        # Load OpenVoice V2 model
-        self.model_available = self._load_model()
+        print("🎓 Initializing OpenVoice Emotion Teacher...")
+        self._load_model()
     
-    def _load_model(self) -> bool:
-        """Load OpenVoice V2 model."""
+    def _load_model(self):
+        """Load OpenVoiceV2 model."""
         try:
-            if not self.model_path.exists():
-                print("⚠️ OpenVoice V2 not found at", self.model_path)
-                print("   Clone it: git clone https://github.com/myshell-ai/OpenVoice.git external/OpenVoice")
-                return False
-            
-            # Import OpenVoice V2 components
-            import sys
-            sys.path.insert(0, str(self.model_path))
-            
-            from openvoice import se_extractor
-            from openvoice.api import ToneColorConverter
-            
-            converter_path = self.model_path / "checkpoints" / "converter"
-            if converter_path.exists():
-                self.tone_color_converter = ToneColorConverter(str(converter_path))
-                self.se_extractor = se_extractor
-                print("✅ OpenVoice V2 emotion teacher loaded")
-                return True
+            # Add OpenVoice to path
+            if self.openvoice_path.exists():
+                sys.path.insert(0, str(self.openvoice_path))
+                
+                # Try to import OpenVoice
+                # Note: Actual import depends on OpenVoice's structure
+                # This is a placeholder - adjust based on OpenVoice's API
+                try:
+                    from openvoice import se_extractor
+                    from openvoice.api import ToneColorConverter
+                    print("✅ OpenVoice modules loaded")
+                    self.model = "loaded"  # Placeholder
+                except ImportError as e:
+                    print(f"⚠️ OpenVoice import failed: {e}")
+                    print("   Will use pre-generated references")
+                    self.model = None
             else:
-                print("⚠️ OpenVoice V2 converter not found")
-                return False
+                print(f"⚠️ OpenVoice path not found: {self.openvoice_path}")
+                print("   Will use pre-generated references")
+                self.model = None
         
         except Exception as e:
-            print(f"⚠️ OpenVoice V2 not available: {e}")
-            return False
+            print(f"⚠️ Error loading OpenVoice: {e}")
+            self.model = None
     
-    def extract_emotion_embedding(self, emotion: str) -> Optional[np.ndarray]:
+    def get_reference_audio(
+        self,
+        emotion: str,
+        use_cached: bool = True
+    ) -> Tuple[torch.Tensor, int]:
         """
-        Extract style embedding for a specific emotion.
+        Get emotional reference audio.
         
         Args:
             emotion: Emotion label
+            use_cached: Use pre-generated reference if available
         
         Returns:
-            Style embedding vector (512-D) or None if extraction fails
+            Tuple of (audio_tensor, sample_rate)
         """
-        if not self.model_available:
-            print("⚠️ OpenVoice V2 not available, returning mock embedding")
-            return np.random.randn(512).astype(np.float32)
+        # Path to pre-generated reference
+        ref_path = Path("data/emotion_references") / f"{emotion}.wav"
         
-        if emotion not in self.emotion_refs:
-            raise ValueError(f"Unknown emotion: {emotion}")
-        
-        ref_path = self.model_path / self.emotion_refs[emotion]
-        
-        if not ref_path.exists():
-            print(f"⚠️ Reference audio not found: {ref_path}")
-            return np.random.randn(512).astype(np.float32)
-        
-        try:
-            # Extract style embedding using OpenVoice's reference encoder
-            target_se, _ = self.se_extractor.get_se(
-                str(ref_path),
-                self.tone_color_converter,
-                target_dir='processed',
-                vad=True
-            )
-            
-            print(f"✅ Extracted embedding for: {emotion}")
-            return target_se
-        
-        except Exception as e:
-            print(f"❌ Failed to extract {emotion}: {e}")
-            return None
-    
-    def extract_all_emotions(self) -> Dict[str, np.ndarray]:
-        """Extract embeddings for all emotions."""
-        embeddings = {}
-        
-        print("\n📦 Extracting all emotion embeddings from OpenVoice V2...")
-        
-        for emotion in self.emotion_refs.keys():
-            embedding = self.extract_emotion_embedding(emotion)
-            if embedding is not None:
-                embeddings[emotion] = embedding
-        
-        print(f"✅ Extracted {len(embeddings)}/{len(self.emotion_refs)} emotions")
-        return embeddings
-    
-    def get_reference_audio(self, emotion: str) -> Tuple[torch.Tensor, int]:
-        """
-        Get raw reference audio for an emotion.
-        
-        Args:
-            emotion: Emotion label
-        
-        Returns:
-            (audio_tensor, sample_rate)
-        """
-        if emotion not in self.emotion_refs:
-            raise ValueError(f"Unknown emotion: {emotion}")
-        
-        ref_path = self.model_path / self.emotion_refs[emotion]
-        
-        if not ref_path.exists():
-            print(f"⚠️ Reference audio not found, generating mock audio")
-            # Generate mock emotional audio
-            duration = 2.0
-            audio = self._generate_mock_emotional_audio(emotion, duration)
-            return audio, self.sample_rate
-        
-        try:
+        # Try to load cached reference first
+        if use_cached and ref_path.exists():
+            print(f"📁 Loading cached reference: {emotion}")
             audio, sr = torchaudio.load(str(ref_path))
-            
-            # Resample if needed
-            if sr != self.sample_rate:
-                audio = torchaudio.functional.resample(audio, sr, self.sample_rate)
-            
-            return audio.squeeze(0), self.sample_rate
+            return audio.squeeze(0), sr
         
-        except Exception as e:
-            print(f"❌ Failed to load reference audio: {e}")
-            duration = 2.0
-            audio = self._generate_mock_emotional_audio(emotion, duration)
+        # Generate new reference if model is available
+        if self.model is not None:
+            print(f"🎙️ Generating reference for: {emotion}")
+            audio = self._generate_reference(emotion)
+            
+            # Save for future use
+            ref_path.parent.mkdir(parents=True, exist_ok=True)
+            torchaudio.save(str(ref_path), audio.unsqueeze(0), self.sample_rate)
+            print(f"💾 Saved reference: {ref_path}")
+            
             return audio, self.sample_rate
+        
+        # Fallback: create synthetic reference
+        print(f"⚠️ Using synthetic reference for: {emotion}")
+        return self._create_synthetic_reference(emotion)
     
-    def _generate_mock_emotional_audio(self, emotion: str, duration: float) -> torch.Tensor:
-        """Generate mock emotional audio for testing."""
+    def _generate_reference(self, emotion: str) -> torch.Tensor:
+        """
+        Generate emotional reference using OpenVoiceV2.
+        
+        This is a placeholder - implement based on OpenVoice's actual API.
+        """
+        # TODO: Implement actual OpenVoice V2 generation
+        # Example (adjust based on OpenVoice API):
+        # audio = self.model.synthesize(
+        #     text=self.emotion_texts[emotion],
+        #     emotion=emotion,
+        #     speaker_id=0
+        # )
+        
+        # For now, return synthetic
+        return self._create_synthetic_reference(emotion)[0]
+    
+    def _create_synthetic_reference(
+        self,
+        emotion: str
+    ) -> Tuple[torch.Tensor, int]:
+        """
+        Create synthetic emotional reference for testing.
+        
+        This generates a simple tone-based reference when OpenVoice is unavailable.
+        """
+        duration = 2.0  # 2 seconds
         num_samples = int(duration * self.sample_rate)
+        
         t = torch.linspace(0, duration, num_samples)
         
-        # Emotion-specific parameters
-        emotion_params = {
-            "calm_supportive": {"freq": 180, "vibrato": 0.02},
-            "empathetic_sad": {"freq": 160, "vibrato": 0.01},
-            "joyful_excited": {"freq": 250, "vibrato": 0.08},
-            "playful": {"freq": 220, "vibrato": 0.06},
-            "confident": {"freq": 200, "vibrato": 0.03},
-            "concerned_anxious": {"freq": 170, "vibrato": 0.04},
-            "angry_firm": {"freq": 210, "vibrato": 0.05},
-            "neutral": {"freq": 190, "vibrato": 0.02}
+        # Different frequency patterns for different emotions
+        emotion_freqs = {
+            "calm_supportive": 200,      # Low, soothing
+            "empathetic_sad": 180,       # Lower, gentle
+            "joyful_excited": 300,       # Higher, energetic
+            "playful": 280,              # Varied, bouncy
+            "confident": 220,            # Strong, steady
+            "concerned_anxious": 240,    # Mid, uncertain
+            "angry_firm": 180,           # Low, intense
+            "neutral": 220               # Balanced
         }
         
-        params = emotion_params.get(emotion, {"freq": 190, "vibrato": 0.02})
+        base_freq = emotion_freqs.get(emotion, 220)
         
-        # Generate tone with emotion-specific characteristics
-        audio = 0.3 * torch.sin(2 * torch.pi * params["freq"] * t)
+        # Generate tone
+        audio = 0.3 * torch.sin(2 * torch.pi * base_freq * t)
         
-        # Add vibrato for emotion
-        if params["vibrato"] > 0:
-            vibrato = params["vibrato"] * torch.sin(2 * torch.pi * 5 * t)
+        # Add emotion-specific modulation
+        if emotion == "joyful_excited":
+            vibrato = 0.1 * torch.sin(2 * torch.pi * 5 * t)
             audio = audio * (1 + vibrato)
+        elif emotion == "empathetic_sad":
+            decay = torch.exp(-t)
+            audio = audio * decay
         
-        # Add some noise
-        audio = audio + 0.02 * torch.randn(num_samples)
-        
-        return audio
+        return audio, self.sample_rate
     
-    def save_embeddings(self, output_dir: str = "data/emotion_embeddings"):
-        """Save all emotion embeddings to disk."""
-        Path(output_dir).mkdir(parents=True, exist_ok=True)
+    def generate_all_references(
+        self,
+        output_dir: str = "data/emotion_references"
+    ) -> Dict[str, str]:
+        """
+        Generate all 8 emotion references and save them.
         
-        embeddings = self.extract_all_emotions()
+        Args:
+            output_dir: Directory to save reference files
         
-        for emotion, embedding in embeddings.items():
-            output_path = Path(output_dir) / f"{emotion}.npy"
-            np.save(output_path, embedding)
-            print(f"💾 Saved: {output_path}")
+        Returns:
+            Dict mapping emotion to file path
+        """
+        output_path = Path(output_dir)
+        output_path.mkdir(parents=True, exist_ok=True)
         
-        # Save metadata
-        metadata = {
-            "model": "OpenVoice V2",
-            "emotions": list(embeddings.keys()),
-            "embedding_dim": embeddings[list(embeddings.keys())[0]].shape[0] if embeddings else 0,
-            "sample_rate": self.sample_rate
-        }
+        print("\n🎭 Generating All Emotion References")
+        print("=" * 60)
         
-        with open(Path(output_dir) / "metadata.json", 'w') as f:
-            json.dump(metadata, f, indent=2)
+        references = {}
         
-        print(f"\n✅ Saved {len(embeddings)} embeddings to {output_dir}")
-    
-    def generate_reference_samples(self, output_dir: str = "data/reference_audio"):
-        """Generate/copy all reference audio samples."""
-        Path(output_dir).mkdir(parents=True, exist_ok=True)
+        for emotion in self.emotion_texts.keys():
+            print(f"\n[{emotion}]")
+            audio, sr = self.get_reference_audio(emotion, use_cached=False)
+            
+            filepath = output_path / f"{emotion}.wav"
+            torchaudio.save(str(filepath), audio.unsqueeze(0), sr)
+            
+            references[emotion] = str(filepath)
+            print(f"✅ Saved: {filepath}")
         
-        print("\n🎵 Generating reference audio samples...")
+        print("\n" + "=" * 60)
+        print(f"✅ Generated {len(references)} emotion references")
+        print(f"📁 Output directory: {output_path}")
         
-        for emotion in self.emotion_refs.keys():
-            audio, sr = self.get_reference_audio(emotion)
-            output_path = Path(output_dir) / f"ref_{emotion}.wav"
-            torchaudio.save(str(output_path), audio.unsqueeze(0), sr)
-            print(f"💾 Saved: {output_path}")
-        
-        print(f"\n✅ Saved {len(self.emotion_refs)} reference samples to {output_dir}")
+        return references
 
 
-# Example usage
+# Test script
 if __name__ == "__main__":
-    # Initialize teacher
     teacher = OpenVoiceEmotionTeacher()
     
-    print("\n🧪 Testing OpenVoice V2 Emotion Teacher\n")
+    # Generate all references
+    references = teacher.generate_all_references()
     
-    # Extract and save embeddings
-    teacher.save_embeddings()
-    
-    # Generate reference audio samples
-    teacher.generate_reference_samples()
-    
-    print("\n✅ OpenVoice V2 emotion teacher test complete!")
-
+    print("\n📊 Summary:")
+    for emotion, path in references.items():
+        print(f"  {emotion}: {path}")

@@ -108,7 +108,7 @@ def main():
     # Step 2: Initialize CSM (Student)
     print("\n[2/3] Loading CSM (Student)...")
     student = HybridVoiceEngine(
-        csm_url="http://localhost:6006/generate",
+        csm_url="http://45.78.17.160:6006/generate",
         default_engine="csm"  # Force CSM for testing
     )
     
@@ -165,4 +165,5 @@ if __name__ == "__main__":
         print(f"\n❌ Evaluation failed: {e}")
         import traceback
         traceback.print_exc()
+
 

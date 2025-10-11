@@ -22,6 +22,8 @@ from emotion_detector.detector import EmotionDetector
 from brain.llm_brain import OviyaBrain
 from emotion_controller.controller import EmotionController
 from voice.openvoice_tts import HybridVoiceEngine
+from voice.emotion_library import get_emotion_library
+from utils.emotion_monitor import get_emotion_monitor
 import time
 from typing import Dict, Optional
 
@@ -38,6 +40,19 @@ class OviyaPipeline:
         """Initialize all four layers."""
         print("🚀 Initializing Oviya Production Pipeline...")
         print("=" * 60)
+        
+        # Load emotion library
+        print("\n[0/4] Loading Expanded Emotion Library...")
+        self.emotion_library = get_emotion_library()
+        stats = self.emotion_library.get_emotion_stats()
+        print(f"  📚 Loaded {stats['total_emotions']} emotions:")
+        print(f"     Tier 1 (Core): {stats['tier1_count']}")
+        print(f"     Tier 2 (Contextual): {stats['tier2_count']}")
+        print(f"     Tier 3 (Expressive): {stats['tier3_count']}")
+        
+        # Initialize emotion monitor for distribution tracking
+        self.emotion_monitor = get_emotion_monitor()
+        print("  📊 Emotion distribution monitor active")
         
         # Layer 1: Emotion Detector
         print("\n[1/4] Loading Emotion Detector...")
@@ -60,7 +75,7 @@ class OviyaPipeline:
         # Layer 4: Voice (Hybrid: CSM + OpenVoiceV2)
         print("\n[4/4] Loading Voice (Hybrid: CSM + OpenVoiceV2)...")
         self.tts = HybridVoiceEngine(
-            csm_url="http://localhost:6006/generate",  # Your Vast.ai CSM service
+            csm_url="https://tanja-flockier-jayleen.ngrok-free.dev/generate",  # Vast.ai CSM via ngrok
             default_engine="auto"  # Auto-select best engine
         )
         
@@ -125,14 +140,35 @@ class OviyaPipeline:
         print(f"  Text: {brain_output['text']}")
         print(f"  Emotion: {brain_output['emotion']}")
         print(f"  Intensity: {brain_output['intensity']}")
+        
+        # Show prosodic markup if available
+        if 'prosodic_text' in brain_output and brain_output['prosodic_text'] != brain_output['text']:
+            print(f"  🎭 Prosodic: {brain_output['prosodic_text']}")
+        
+        # Show emotional state if available
+        if 'emotional_state' in brain_output:
+            state = brain_output['emotional_state']
+            print(f"  🧠 Memory: energy={state.get('energy_level', 0):.2f}, pace={state.get('pace', 1):.2f}, warmth={state.get('warmth', 0.5):.2f}")
+        
         print(f"  ⚡ Think time: {think_time*1000:.0f}ms")
+        
+        # Resolve emotion through library (handles aliases and validation)
+        resolved_emotion = self.emotion_library.get_emotion(brain_output['emotion'])
+        if resolved_emotion != brain_output['emotion']:
+            print(f"  🔄 Resolved: {brain_output['emotion']} → {resolved_emotion}")
+        
+        # Record emotion for distribution monitoring
+        self.emotion_monitor.record_emotion(resolved_emotion)
         
         # Step 4: Emotion Controller - Map to acoustic params
         print(f"\n❤️ [Emotion Controller] Mapping emotion...")
         emotion_params = self.emotion_controller.map_emotion(
-            brain_output['emotion'],
+            resolved_emotion,
             intensity=brain_output['intensity']
         )
+        
+        # Add resolved emotion to params for CSM
+        emotion_params['emotion_label'] = resolved_emotion
         
         print(f"  Style Token: {emotion_params['style_token']}")
         print(f"  Pitch: {emotion_params['pitch_scale']:.2f}")
@@ -149,7 +185,9 @@ class OviyaPipeline:
                 text=brain_output['text'],
                 emotion_params=emotion_params,
                 speaker_id="oviya_v1",
-                conversation_context=conversation_context
+                conversation_context=conversation_context,
+                prosodic_text=brain_output.get('prosodic_text', ''),
+                emotional_state=brain_output.get('emotional_state', {})
             )
             
             duration = audio.shape[0] / 24000  # Default sample rate

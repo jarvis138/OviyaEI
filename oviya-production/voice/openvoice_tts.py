@@ -19,6 +19,7 @@ from typing import Dict, Optional, Tuple, Union
 import sys
 from pathlib import Path
 import time
+from .audio_postprocessor import AudioPostProcessor
 
 
 class HybridVoiceEngine:
@@ -33,7 +34,7 @@ class HybridVoiceEngine:
     
     def __init__(
         self,
-        csm_url: str = "http://localhost:6006/generate",
+        csm_url: str = "https://tanja-flockier-jayleen.ngrok-free.dev/generate",
         openvoice_model_path: Optional[str] = None,
         device: str = "cuda" if torch.cuda.is_available() else "cpu",
         default_engine: str = "auto"  # "auto", "csm", "openvoice"
@@ -47,6 +48,9 @@ class HybridVoiceEngine:
         # Initialize engines
         self.csm_available = False
         self.openvoice_available = False
+        
+        # Initialize audio post-processor for Maya-level realism
+        self.audio_processor = AudioPostProcessor(sample_rate=24000)
         
         print("🎤 Initializing Hybrid Voice Engine...")
         self._initialize_engines()
@@ -83,8 +87,8 @@ class HybridVoiceEngine:
         # Try direct generate endpoint
         try:
             test_payload = {
-                "prompt": "test",
-                "speaker_id": 0,
+                "text": "test",
+                "speaker": 0,
                 "max_audio_length_ms": 1000
             }
             response = requests.post(self.csm_url, json=test_payload, timeout=5)
@@ -119,10 +123,12 @@ class HybridVoiceEngine:
         emotion_params: Dict,
         speaker_id: str = "oviya_v1",
         engine: Optional[str] = None,
-        conversation_context: Optional[list] = None
+        conversation_context: Optional[list] = None,
+        prosodic_text: str = "",
+        emotional_state: Optional[Dict] = None
     ) -> torch.Tensor:
         """
-        Generate speech using the best available engine.
+        Generate speech using the best available engine with Maya-level post-processing.
         
         Args:
             text: Text to speak
@@ -130,28 +136,50 @@ class HybridVoiceEngine:
             speaker_id: Speaker identity
             engine: Force specific engine ("csm" or "openvoice")
             conversation_context: Recent conversation for CSM
+            prosodic_text: Text with prosodic markup for breath/pause injection
+            emotional_state: Emotional state dict from brain
         
         Returns:
-            Audio tensor
+            Audio tensor (post-processed for realism)
         """
         # Select engine
-        selected_engine = self._select_engine(engine, emotion_params, conversation_context)
+        selected_engine = self._select_engine(engine, emotion_params, conversation_context, speaker_id)
         
         print(f"🎤 Using engine: {selected_engine}")
         
+        # Generate base audio
         if selected_engine == "csm":
-            return self._generate_with_csm(text, emotion_params, speaker_id, conversation_context)
+            base_audio = self._generate_with_csm(text, emotion_params, speaker_id, conversation_context)
         elif selected_engine == "openvoice":
-            return self._generate_with_openvoice(text, emotion_params, speaker_id)
+            base_audio = self._generate_with_openvoice(text, emotion_params, speaker_id)
         else:
-            # Fallback to mock
+            # Fallback to mock (no post-processing for mock)
             return self._generate_with_mock(text, emotion_params)
+        
+        # Apply Maya-level post-processing for realism
+        try:
+            print("🎭 Applying Maya-level audio post-processing...")
+            processed_audio = self.audio_processor.process(
+                base_audio,
+                prosodic_text=prosodic_text,
+                emotional_state=emotional_state,
+                add_reverb=True,
+                master_audio=True
+            )
+            print(f"   ✅ Enhanced audio: {len(base_audio)} → {len(processed_audio)} samples")
+            return processed_audio
+            
+        except Exception as e:
+            print(f"⚠️  Post-processing failed: {e}")
+            print("   Returning base audio without enhancement")
+            return base_audio
     
     def _select_engine(
         self, 
         forced_engine: Optional[str], 
         emotion_params: Dict, 
-        conversation_context: Optional[list]
+        conversation_context: Optional[list],
+        speaker_id: str = "oviya_v1"
     ) -> str:
         """Select the best engine for the given parameters."""
         
@@ -209,18 +237,26 @@ class HybridVoiceEngine:
     ) -> torch.Tensor:
         """Generate speech using CSM."""
         try:
-            # Prepare CSM payload
-            payload = {
-                "prompt": text,
-                "speaker_id": 0,  # CSM uses numeric speaker IDs
-                "max_audio_length_ms": 10000,
-                "temperature": self._map_emotion_to_csm_temperature(emotion_params),
-                "topk": 50
-            }
+            # Test CSM connection first
+            health_url = self.csm_url.replace('/generate', '/health')
+            try:
+                health_response = requests.get(health_url, timeout=5)
+                if health_response.status_code != 200:
+                    raise Exception(f"CSM health check failed: {health_response.status_code}")
+            except Exception as e:
+                print(f"⚠️ CSM server not reachable: {e}")
+                print("   Falling back to mock TTS")
+                return self._generate_with_mock(text, emotion_params)
             
-            # Add context if available
-            if conversation_context:
-                payload["context"] = conversation_context
+            # Prepare CSM payload with emotion reference
+            emotion_label = emotion_params.get("emotion_label", "neutral")
+            
+            payload = {
+                "text": text,
+                "speaker": 0,  # CSM uses numeric speaker IDs
+                "max_audio_length_ms": 10000,
+                "reference_emotion": emotion_label  # Emotion reference for conditioning
+            }
             
             # Call CSM service
             response = requests.post(self.csm_url, json=payload, timeout=30)
@@ -245,7 +281,7 @@ class HybridVoiceEngine:
                 else:
                     raise Exception("No audio in CSM response")
             else:
-                raise Exception(f"CSM error: {response.status_code}")
+                raise Exception(f"CSM error: {response.status_code} - {response.text}")
         
         except Exception as e:
             print(f"❌ CSM generation failed: {e}")
@@ -377,7 +413,7 @@ class HybridVoiceEngine:
         return self._generate_with_csm(
             text=text,
             emotion_params=emotion_params,
-            speaker_id=0,
+            speaker_id=str(speaker_id),
             conversation_context=context
         )
     

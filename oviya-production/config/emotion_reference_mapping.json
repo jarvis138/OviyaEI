@@ -1,0 +1,92 @@
+{
+  "description": "Emotion reference mapping for OpenVoiceV2 to CSM integration",
+  "version": "1.0",
+  "emotions": {
+    "calm_supportive": {
+      "openvoice_style": "calm",
+      "reference_text": "Take a deep breath. Everything will be okay.",
+      "reference_file": "calm_supportive.wav",
+      "prosody_hints": {
+        "pace": "slow",
+        "tone": "gentle",
+        "energy": "low"
+      }
+    },
+    "empathetic_sad": {
+      "openvoice_style": "sad",
+      "reference_text": "I'm so sorry you're going through this.",
+      "reference_file": "empathetic_sad.wav",
+      "prosody_hints": {
+        "pace": "slow",
+        "tone": "warm",
+        "energy": "low"
+      }
+    },
+    "joyful_excited": {
+      "openvoice_style": "happy",
+      "reference_text": "That's amazing! I'm so happy for you!",
+      "reference_file": "joyful_excited.wav",
+      "prosody_hints": {
+        "pace": "fast",
+        "tone": "bright",
+        "energy": "high"
+      }
+    },
+    "playful": {
+      "openvoice_style": "cheerful",
+      "reference_text": "Hey there! This is going to be fun!",
+      "reference_file": "playful.wav",
+      "prosody_hints": {
+        "pace": "medium-fast",
+        "tone": "light",
+        "energy": "medium-high"
+      }
+    },
+    "confident": {
+      "openvoice_style": "confident",
+      "reference_text": "You've got this. I believe in you.",
+      "reference_file": "confident.wav",
+      "prosody_hints": {
+        "pace": "steady",
+        "tone": "strong",
+        "energy": "medium"
+      }
+    },
+    "concerned_anxious": {
+      "openvoice_style": "worried",
+      "reference_text": "Are you okay? I'm here if you need me.",
+      "reference_file": "concerned_anxious.wav",
+      "prosody_hints": {
+        "pace": "medium",
+        "tone": "caring",
+        "energy": "medium"
+      }
+    },
+    "angry_firm": {
+      "openvoice_style": "angry",
+      "reference_text": "That's not acceptable. This needs to stop.",
+      "reference_file": "angry_firm.wav",
+      "prosody_hints": {
+        "pace": "firm",
+        "tone": "strong",
+        "energy": "high"
+      }
+    },
+    "neutral": {
+      "openvoice_style": "neutral",
+      "reference_text": "Hello. How can I help you today?",
+      "reference_file": "neutral.wav",
+      "prosody_hints": {
+        "pace": "normal",
+        "tone": "balanced",
+        "energy": "medium"
+      }
+    }
+  },
+  "paths": {
+    "reference_directory": "data/emotion_references",
+    "vastai_reference_directory": "/workspace/emotion_references"
+  }
+}
+
+

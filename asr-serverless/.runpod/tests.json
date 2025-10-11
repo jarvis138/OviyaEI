@@ -1,0 +1,47 @@
+{
+  "tests": [
+    {
+      "name": "vad_test",
+      "input": {
+        "audio": "base64_encoded_audio_here",
+        "sample_rate": 16000,
+        "operation": "vad"
+      },
+      "timeout": 30000
+    },
+    {
+      "name": "transcription_test",
+      "input": {
+        "audio": "base64_encoded_audio_here",
+        "sample_rate": 16000,
+        "operation": "transcribe"
+      },
+      "timeout": 60000
+    },
+    {
+      "name": "combined_test",
+      "input": {
+        "audio": "base64_encoded_audio_here",
+        "sample_rate": 16000,
+        "operation": "both"
+      },
+      "timeout": 90000
+    }
+  ],
+  "config": {
+    "gpuTypeId": "NVIDIA A40",
+    "gpuCount": 1,
+    "env": [
+      {
+        "key": "NO_TORCH_COMPILE",
+        "value": "1"
+      }
+    ],
+    "allowedCudaVersions": [
+      "12.1",
+      "11.8"
+    ]
+  }
+}
+
+

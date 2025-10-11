@@ -1,0 +1,126 @@
+# Day 3 - RunPod Commands
+# Copy-paste these into your RunPod Jupyter Lab terminal
+
+# ============================================
+# IMPORTANT: Start your RunPod pod first!
+# ============================================
+
+cd /workspace/csm
+mkdir -p streaming-test
+cd streaming-test
+
+# ============================================
+# Create Sentence Chunker
+# ============================================
+
+cat > sentence_chunker.py << 'CHUNKER_EOF'
+import re
+from typing import List
+
+class SentenceChunker:
+    def __init__(self, words_per_chunk: int = 7):
+        self.words_per_chunk = words_per_chunk
+    
+    def chunk_text(self, text: str) -> List[str]:
+        sentences = re.split(r'(?<=[.!?])\s+', text.strip())
+        chunks = []
+        
+        for sentence in sentences:
+            words = sentence.split()
+            if len(words) <= self.words_per_chunk:
+                chunks.append(sentence)
+            else:
+                for i in range(0, len(words), self.words_per_chunk):
+                    chunk_words = words[i:i + self.words_per_chunk]
+                    chunk = ' '.join(chunk_words)
+                    if i + self.words_per_chunk < len(words):
+                        chunk += ','
+                    chunks.append(chunk)
+        return chunks
+    
+    def chunk_with_context(self, text: str) -> List[dict]:
+        chunks = self.chunk_text(text)
+        return [
+            {'text': chunk, 'is_first': i == 0, 'is_last': i == len(chunks) - 1, 'chunk_index': i}
+            for i, chunk in enumerate(chunks)
+        ]
+CHUNKER_EOF
+
+# ============================================
+# Create Streaming Test
+# ============================================
+
+cat > streaming_test.py << 'STREAM_EOF'
+import sys
+sys.path.insert(0, '/workspace/csm')
+
+from generator import load_csm_1b
+import torchaudio
+import time
+from sentence_chunker import SentenceChunker
+
+print("=" * 60)
+print("Streaming CSM Test - Day 3")
+print("=" * 60)
+
+# Initialize
+print("\nLoading CSM...")
+generator = load_csm_1b(device="cuda")
+chunker = SentenceChunker(words_per_chunk=7)
+
+# Test text
+text = "I understand how you're feeling. That sounds really challenging. I'm here to listen."
+
+print(f"\nText: \"{text}\"")
+chunks = chunker.chunk_text(text)
+print(f"Chunks: {len(chunks)}")
+
+# Generate each chunk
+first_chunk_latency = None
+all_latencies = []
+
+for i, chunk in enumerate(chunks):
+    print(f"\n  Chunk {i+1}/{len(chunks)}: \"{chunk}\"")
+    
+    start = time.time()
+    audio = generator.generate(
+        text=chunk,
+        speaker=0,
+        context=[],
+        max_audio_length_ms=5000
+    )
+    latency = (time.time() - start) * 1000
+    all_latencies.append(latency)
+    
+    if i == 0:
+        first_chunk_latency = latency
+        print(f"  🎯 FIRST CHUNK: {latency:.0f}ms")
+    else:
+        print(f"  ✅ Generated in {latency:.0f}ms")
+    
+    torchaudio.save(f"chunk_{i}.wav", audio.unsqueeze(0).cpu(), generator.sample_rate)
+
+# Results
+print("\n" + "=" * 60)
+print("RESULTS:")
+print(f"  First chunk latency: {first_chunk_latency:.0f}ms")
+print(f"  Average chunk latency: {sum(all_latencies)/len(all_latencies):.0f}ms")
+print(f"  Target: <900ms")
+print(f"  Status: {'✅ PASS' if first_chunk_latency < 900 else '⚠️ NEEDS WORK'}")
+print("=" * 60)
+
+with open('streaming_results.txt', 'w') as f:
+    f.write(f"First chunk: {first_chunk_latency:.0f}ms\n")
+    f.write(f"Average: {sum(all_latencies)/len(all_latencies):.0f}ms\n")
+    f.write(f"Status: {'PASS' if first_chunk_latency < 900 else 'FAIL'}\n")
+
+print("\n✅ Results saved!")
+STREAM_EOF
+
+# ============================================
+# RUN THE TEST
+# ============================================
+
+python streaming_test.py
+
+

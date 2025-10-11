@@ -1,0 +1,116 @@
+# Docker Compose for Oviya AI Services
+version: '3.8'
+
+services:
+  # CSM Streaming Service (GPU)
+  csm-service:
+    build:
+      context: ../../services/csm-streaming
+      dockerfile: ../../infrastructure/docker/Dockerfile.csm
+    ports:
+      - "8000:8000"
+    environment:
+      - CUDA_VISIBLE_DEVICES=0
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - csm-models:/app/models
+      - csm-emotion-prompts:/app/emotion_prompts
+      - csm-logs:/app/logs
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # ASR Service (CPU)
+  asr-service:
+    build:
+      context: ../../services/asr-realtime
+      dockerfile: ../../infrastructure/docker/Dockerfile.asr
+    ports:
+      - "8001:8001"
+    environment:
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - asr-models:/app/models
+      - asr-logs:/app/logs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # Orchestrator Service
+  orchestrator-service:
+    build:
+      context: ../../services/orchestrator
+      dockerfile: ../../infrastructure/docker/Dockerfile.orchestrator
+    ports:
+      - "8002:8002"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - CSM_SERVICE_URL=http://csm-service:8000
+      - ASR_SERVICE_URL=http://asr-service:8001
+    depends_on:
+      - csm-service
+      - asr-service
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # Redis (for session management)
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Nginx (Load Balancer)
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+      - ./ssl:/etc/nginx/ssl
+    depends_on:
+      - orchestrator-service
+    restart: unless-stopped
+
+volumes:
+  csm-models:
+  csm-emotion-prompts:
+  csm-logs:
+  asr-models:
+  asr-logs:
+  redis-data:
+
+networks:
+  default:
+    name: oviya-network
+
+
