@@ -133,7 +133,7 @@ class AudioMaster:
     def __init__(self, sample_rate: int = 24000):
         self.sample_rate = sample_rate
         
-    def master_audio(self, audio: torch.Tensor, target_lufs: float = -16.0) -> torch.Tensor:
+    def master_audio(self, audio: torch.Tensor, target_lufs: float = -12.0) -> torch.Tensor:
         """Apply mastering to audio for natural speech quality"""
         
         # Convert to numpy for processing
@@ -150,26 +150,29 @@ class AudioMaster:
             except Exception as e:
                 print(f"⚠️  Loudness normalization failed: {e}")
         
-        # 2. High-frequency enhancement (presence boost)
+        # 2. Gentle high-frequency enhancement for clarity
         try:
-            # Gentle high-shelf EQ at 4kHz (+2dB)
-            sos = signal.butter(2, 4000, 'high', fs=self.sample_rate, output='sos')
+            # Subtle high-shelf EQ at 6kHz (+1dB)
+            sos = signal.butter(2, 6000, 'high', fs=self.sample_rate, output='sos')
             audio_np = signal.sosfilt(sos, audio_np)
-            audio_np = audio_np * 1.02  # +2dB boost
+            audio_np = audio_np * 1.01  # +1dB boost
         except Exception as e:
             print(f"⚠️  EQ processing failed: {e}")
         
         # 3. Gentle compression (reduce dynamic range)
         audio_np = self._gentle_compress(audio_np)
         
-        # 4. Final limiting
+        # 4. Gentle volume boost for clarity
+        audio_np = audio_np * 1.5  # +3.5dB boost for clarity
+        
+        # 5. Final limiting (more conservative)
         peak = np.abs(audio_np).max()
-        if peak > 0.95:
-            audio_np = audio_np * (0.95 / peak)
+        if peak > 0.8:
+            audio_np = audio_np * (0.8 / peak)
         
         return torch.tensor(audio_np, dtype=torch.float32)
     
-    def _gentle_compress(self, audio: np.ndarray, threshold: float = 0.7, ratio: float = 3.0) -> np.ndarray:
+    def _gentle_compress(self, audio: np.ndarray, threshold: float = 0.5, ratio: float = 3.0) -> np.ndarray:
         """Apply gentle compression to reduce dynamic range"""
         # Simple soft-knee compression
         abs_audio = np.abs(audio)
@@ -214,6 +217,33 @@ class ProsodyProcessor:
     def __init__(self, sample_rate: int = 24000):
         self.sample_rate = sample_rate
         self.breath_manager = BreathSampleManager()
+        
+        # Enhanced breath tracking
+        self.breath_state = {
+            "lung_capacity": 1.0,  # 0=empty, 1=full
+            "speech_duration": 0.0,  # Cumulative speaking time
+            "last_breath": 0.0,  # Time since last breath
+            "natural_breath_interval": 3.5  # Average seconds between breaths
+        }
+        
+        # Advanced Respiratory System
+        self.advanced_respiratory = AdvancedRespiratorySystem()
+        
+        # Emotion-linked breathing profiles
+        self.BREATH_PROFILES = {
+            "calm_supportive": {"duration": 0.3, "volume": 0.2, "frequency": 15.0, "tremor": 0.02},
+            "empathetic_sad": {"duration": 0.5, "volume": 0.35, "frequency": 10.0, "tremor": 0.03},
+            "concerned_anxious": {"duration": 0.2, "volume": 0.45, "frequency": 5.0, "tremor": 0.06},
+            "joyful_excited": {"duration": 0.15, "volume": 0.3, "frequency": 7.0, "tremor": 0.04},
+            "neutral": {"duration": 0.25, "volume": 0.25, "frequency": 12.0, "tremor": 0.01}
+        }
+        
+        # Conversation timing tracking
+        self.conversation_timer = {
+            "total_time": 0.0,
+            "last_breath_time": 0.0,
+            "current_emotion": "neutral"
+        }
     
     def process_prosodic_text(self, audio: torch.Tensor, prosodic_text: str) -> torch.Tensor:
         """Process audio based on prosodic markup"""
@@ -227,8 +257,8 @@ class ProsodyProcessor:
         # Apply timing modifications
         modified_audio = self._apply_timing_modifications(audio, markers)
         
-        # Add breath samples
-        final_audio = self._add_breath_samples(modified_audio, markers)
+        # Add breath samples with emotional context
+        final_audio = self._add_breath_samples(modified_audio, markers, emotional_state)
         
         return final_audio
     
@@ -285,45 +315,99 @@ class ProsodyProcessor:
         
         return audio
     
-    def _add_breath_samples(self, audio: torch.Tensor, markers: List[Dict]) -> torch.Tensor:
-        """Add breath samples based on markers with robust error handling"""
+    def _add_breath_samples(self, audio: torch.Tensor, markers: List[Dict], emotional_state: Optional[Dict] = None) -> torch.Tensor:
+        """
+        Enhanced breath sample injection based on natural respiratory patterns.
+        
+        Features:
+        - Respiratory state model (lung capacity tracking)
+        - Natural breath timing based on speech duration
+        - Adaptive breath types (soft/quick/deep) based on context
+        - Smart placement to avoid awkward timing
+        """
         
         try:
-            breath_markers = [m for m in markers if m['type'] in ['breath', 'pause', 'long_pause']]
+            # Calculate audio duration
+            audio_duration = len(audio) / self.sample_rate
+            
+            # Update respiratory state
+            self._update_respiratory_state(audio_duration)
+            
+            breath_markers = [m for m in markers if m['type'] in ['breath', 'pause', 'long_pause', 'micro_pause']]
             
             if not breath_markers:
-                return audio
+                # Even without explicit markers, add breath if needed
+                if self.breath_state["lung_capacity"] < 0.3:
+                    breath_markers = [{"type": "breath", "position": 0}]
             
             # For simplicity, add breath at the beginning if breath markers exist
             has_breath = any(m['type'] == 'breath' for m in breath_markers)
             has_pause = any(m['type'] in ['pause', 'long_pause'] for m in breath_markers)
+            has_micro_pause = any(m['type'] == 'micro_pause' for m in breath_markers)
             
             segments = [audio]
             
-            # Limit breath injection to prevent excessive drift
-            max_breaths = 1  # Only add one breath per audio to limit drift
+            # Adaptive breath injection based on respiratory state
             breaths_added = 0
+            max_breaths = self._calculate_max_breaths(audio_duration)
             
-            if has_breath and breaths_added < max_breaths:
+            if (has_breath or should_breathe) and breaths_added < max_breaths:
                 try:
-                    # Add breath at beginning (only if audio is long enough)
-                    if len(audio) / self.sample_rate > 0.5:  # Only for audio > 0.5s
-                        breath_sample = self.breath_manager.get_breath_sample("quick_breath")
+                    # Choose breath type based on emotion profile
+                    breath_duration = breath_profile["duration"]
+                    breath_volume = breath_profile["volume"]
+                    tremor_intensity = breath_profile["tremor"]
+                    
+                    # Add breath with emotion-specific parameters
+                    if len(audio) / self.sample_rate > 0.5:
+                        breath_sample = self.breath_manager.get_breath_sample("soft_inhale")
                         if breath_sample is not None and len(breath_sample) > 0:
-                            # Scale breath to be quieter
-                            breath_sample = breath_sample * 0.3
+                            # Apply emotion-specific volume
+                            breath_sample = breath_sample * breath_volume
+                            
+                            # Apply physiological tremor
+                            breath_sample = apply_physiological_tremor(breath_sample, tremor_intensity)
+                            
                             segments.insert(0, breath_sample)
                             breaths_added += 1
+                            
+                            # Reset respiratory system and update timing
+                            self.advanced_respiratory.reset_after_breath()
+                            self.conversation_timer["last_breath_time"] = self.conversation_timer["total_time"]
                 except Exception as e:
-                    print(f"⚠️  Failed to add breath at beginning: {e}")
+                    print(f"⚠️  Failed to add advanced breath: {e}")
             
-            if has_pause and breaths_added < max_breaths:
+            # Handle micro-pauses with subtle breath sounds
+            if has_micro_pause and breaths_added < max_breaths:
                 try:
-                    # Add very short pause (silence) instead of breath sample
-                    # This maintains pause effect without adding duration
-                    if len(audio) / self.sample_rate > 1.0:  # Only for audio > 1s
+                    # For micro-pauses, add very quiet, very short breath
+                    if len(audio) / self.sample_rate > 1.0:
+                        split_point = int(len(audio) * 0.5)
+                        if 0 < split_point < len(audio):
+                            # Get shortest breath type
+                            micro_breath = self.breath_manager.get_breath_sample("quick_breath")
+                            if micro_breath is not None:
+                                # Make it very quiet
+                                micro_breath = micro_breath * 0.1
+                                # Truncate to 50ms max
+                                max_samples = int(0.05 * self.sample_rate)
+                                micro_breath = micro_breath[:max_samples]
+                                
+                                segments = [
+                                    audio[:split_point],
+                                    micro_breath,
+                                    audio[split_point:]
+                                ]
+                                breaths_added += 1
+                except Exception as e:
+                    print(f"⚠️  Failed to add micro-pause breath: {e}")
+            
+            elif has_pause and breaths_added < max_breaths:
+                try:
+                    # For regular pauses, add short silence
+                    if len(audio) / self.sample_rate > 1.0:
                         split_point = int(len(audio) * 0.6)
-                        if split_point > 0 and split_point < len(audio):
+                        if 0 < split_point < len(audio):
                             # Add tiny silence (50ms)
                             silence = torch.zeros(int(0.05 * self.sample_rate))
                             segments = [
@@ -348,6 +432,96 @@ class ProsodyProcessor:
         except Exception as e:
             print(f"⚠️  Breath injection failed, returning original audio: {e}")
             return audio  # Return unmodified audio on any error
+    
+    def _update_respiratory_state(self, audio_duration: float):
+        """Update respiratory state based on speech duration"""
+        
+        # Deplete lung capacity based on speaking duration
+        # Average speech uses ~0.2 lung capacity per second
+        capacity_used = audio_duration * 0.2
+        self.breath_state["lung_capacity"] = max(0.0, self.breath_state["lung_capacity"] - capacity_used)
+        
+        # Update time since last breath
+        self.breath_state["last_breath"] += audio_duration
+        self.breath_state["speech_duration"] += audio_duration
+        
+        # Natural breath urgency increases over time
+        if self.breath_state["last_breath"] > self.breath_state["natural_breath_interval"]:
+            # Force breath needed
+            self.breath_state["lung_capacity"] = min(0.2, self.breath_state["lung_capacity"])
+    
+    def _select_breath_type(self) -> str:
+        """Select breath type based on current respiratory state"""
+        
+        capacity = self.breath_state["lung_capacity"]
+        
+        if capacity < 0.2:
+            # Need deep breath
+            return "sigh"
+        elif capacity < 0.4:
+            # Need normal breath
+            return "soft_inhale"
+        elif capacity < 0.6:
+            # Quick breath is enough
+            return "quick_breath"
+        else:
+            # Just a pause breath
+            return "pause_breath"
+    
+    def _calculate_max_breaths(self, audio_duration: float) -> int:
+        """Calculate maximum breaths to add based on audio duration"""
+        
+        # Allow 1 breath per 2 seconds of audio, max 2 breaths
+        max_breaths = min(2, int(audio_duration / 2.0) + 1)
+        
+        # Always allow at least 1 if lung capacity is low
+        if self.breath_state["lung_capacity"] < 0.3:
+            max_breaths = max(1, max_breaths)
+        
+        return max_breaths
+
+
+class AdvancedRespiratorySystem:
+    """Advanced respiratory system with emotion-linked breathing and physiological modeling"""
+    
+    def __init__(self):
+        self.lung_capacity = 1.0  # 0=empty, 1=full
+        self.phoneme_density = 1.0  # Average phoneme density
+        self.last_update_time = 0.0
+        
+    def update_lung_capacity(self, words: int, phoneme_density: float, intensity: float):
+        """Update lung capacity based on speech effort"""
+        depletion = (words * 0.05) * (intensity + 1.0) * phoneme_density
+        self.lung_capacity = max(0.0, self.lung_capacity - depletion)
+        return self.lung_capacity
+    
+    def should_breathe(self, emotion: str, time_since_last: float, profile: Dict) -> bool:
+        """Determine if breathing should occur based on emotion profile"""
+        return self.lung_capacity < 0.2 or time_since_last >= profile["frequency"]
+    
+    def reset_after_breath(self):
+        """Reset lung capacity after taking a breath"""
+        self.lung_capacity = 1.0
+        return self.lung_capacity
+
+
+def calculate_phoneme_density(text: str) -> float:
+    """Calculate phoneme density of text (vowels per word)"""
+    import re
+    words = text.split()
+    if not words:
+        return 1.0
+    vowels = len(re.findall(r'[aeiou]+', text.lower()))
+    return min(2.0, max(0.5, vowels / len(words)))
+
+
+def apply_physiological_tremor(audio: torch.Tensor, intensity: float) -> torch.Tensor:
+    """Apply physiological micro-tremor (4-6 Hz) to audio"""
+    duration = len(audio) / 24000
+    t = torch.linspace(0, duration, len(audio))
+    tremor_freq = 5.0 + torch.rand(1).item()  # 4-6 Hz variation
+    tremor = 1.0 + intensity * torch.sin(2 * np.pi * tremor_freq * t)
+    return audio * tremor
 
 
 class AudioPostProcessor:
@@ -398,13 +572,13 @@ class AudioPostProcessor:
         if emotional_state:
             audio = self._apply_emotional_modulations(audio, emotional_state)
         
-        # 3. Add room reverb for spatial realism
+        # 3. Add subtle room reverb for spatial realism
         if add_reverb:
-            audio = self.audio_master.add_room_reverb(audio, wet_level=0.08)
+            audio = self.audio_master.add_room_reverb(audio, wet_level=0.05)
         
         # 4. Master audio for natural quality
         if master_audio:
-            audio = self.audio_master.master_audio(audio, target_lufs=-15.0)  # -15 LUFS for web
+            audio = self.audio_master.master_audio(audio, target_lufs=-12.0)  # Balanced loudness
         
         # 5. Check for audio drift
         if check_drift:

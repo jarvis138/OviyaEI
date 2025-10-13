@@ -291,3 +291,4 @@ echo "  2. python3 /workspace/update_csm_server_vastai.py"
 echo ""
 
 
+

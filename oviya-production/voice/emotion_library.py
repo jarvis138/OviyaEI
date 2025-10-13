@@ -72,20 +72,26 @@ class EmotionLibrary:
             self._load_default_config()
     
     def _load_default_config(self):
-        """Load default emotion configuration"""
+        """Load default emotion configuration with 49+ emotions"""
         self.tiers = {
             "tier1_core": [
+                # Base OpenVoiceV2 emotions (8)
                 "calm_supportive", "empathetic_sad", "joyful_excited",
-                "confident", "neutral", "comforting", "encouraging",
-                "thoughtful", "affectionate", "reassuring"
+                "confident", "neutral", "playful", "concerned_anxious", "angry_firm",
+                # Common blended emotions (7)
+                "comforting", "encouraging", "thoughtful", "affectionate",
+                "grateful", "curious", "relieved"
             ],
             "tier2_contextual": [
-                "playful", "concerned_anxious", "melancholy", "wistful",
-                "tired", "curious", "dreamy", "relieved", "proud"
+                # Blended nuanced emotions (10)
+                "melancholic", "wistful", "tired", "dreamy",
+                "proud", "sympathetic", "reflective", "amused",
+                "apologetic", "tender"
             ],
             "tier3_expressive": [
-                "angry_firm", "sarcastic", "mischievous", "tender",
-                "amused", "sympathetic", "reflective", "grateful", "apologetic"
+                # Dramatic & rare emotions (8)
+                "sarcastic", "mischievous", "reassuring",
+                "excited", "nervous", "frustrated", "determined", "hopeful"
             ]
         }
         

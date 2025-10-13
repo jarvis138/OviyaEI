@@ -27,3 +27,26 @@ pytest-cov>=4.1.0
 librosa>=0.10.0
 scipy>=1.10.0
 
+# WhisperX and VAD dependencies for real-time voice input
+whisperx>=3.1.1
+git+https://github.com/snakers4/silero-vad.git
+sounddevice>=0.4.6  # For real-time audio recording
+
+# Acoustic emotion detection
+# transformers already included above for OpenVoiceV2
+
+# Speaker diarization (optional, requires HuggingFace token)
+# pyannote.audio>=3.1.0  # Uncomment if using diarization
+
+# Audio normalization and mastering
+pyloudnorm>=0.1.1
+
+# WebSocket server
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+python-multipart>=0.0.6
+websockets>=12.0
+
+# Additional utilities
+python-dotenv>=1.0.0
+

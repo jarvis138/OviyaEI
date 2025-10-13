@@ -1,0 +1,113 @@
+version: '3.8'
+
+services:
+  # Ollama LLM Service
+  ollama:
+    image: ollama/ollama:latest
+    container_name: oviya-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+  
+  # CSM Voice Server
+  csm-server:
+    build:
+      context: ./csm_server
+      dockerfile: Dockerfile
+    container_name: oviya-csm
+    ports:
+      - "19517:19517"
+    volumes:
+      - ./emotion_references:/app/emotion_references
+      - csm_models:/app/models
+    environment:
+      - CUDA_VISIBLE_DEVICES=0
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:19517/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    depends_on:
+      - ollama
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+  
+  # Oviya Backend (WebSocket Server)
+  oviya-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: oviya-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+      - ./audio_assets:/app/audio_assets
+    environment:
+      - OLLAMA_URL=http://ollama:11434/api/generate
+      - CSM_URL=http://csm-server:19517/generate
+      - PYTHONUNBUFFERED=1
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    depends_on:
+      - ollama
+      - csm-server
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+  
+  # Oviya Web Frontend (Optional)
+  oviya-frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: oviya-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - REACT_APP_WS_URL=ws://localhost:8000/ws/conversation
+      - REACT_APP_API_URL=http://localhost:8000
+    restart: unless-stopped
+    depends_on:
+      - oviya-backend
+
+volumes:
+  ollama_data:
+    driver: local
+  csm_models:
+    driver: local
+
+networks:
+  default:
+    name: oviya-network
+

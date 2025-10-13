@@ -75,7 +75,7 @@ class OviyaPipeline:
         # Layer 4: Voice (Hybrid: CSM + OpenVoiceV2)
         print("\n[4/4] Loading Voice (Hybrid: CSM + OpenVoiceV2)...")
         self.tts = HybridVoiceEngine(
-            csm_url="https://tanja-flockier-jayleen.ngrok-free.dev/generate",  # Vast.ai CSM via ngrok
+            csm_url="https://astronomy-initiative-paso-cream.trycloudflare.com/generate",  # CSM via ngrok tunnel
             default_engine="auto"  # Auto-select best engine
         )
         

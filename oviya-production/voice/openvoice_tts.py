@@ -34,7 +34,7 @@ class HybridVoiceEngine:
     
     def __init__(
         self,
-        csm_url: str = "https://tanja-flockier-jayleen.ngrok-free.dev/generate",
+        csm_url: str = "http://175.155.64.172:19517/generate",
         openvoice_model_path: Optional[str] = None,
         device: str = "cuda" if torch.cuda.is_available() else "cpu",
         default_engine: str = "auto"  # "auto", "csm", "openvoice"
@@ -156,22 +156,16 @@ class HybridVoiceEngine:
             # Fallback to mock (no post-processing for mock)
             return self._generate_with_mock(text, emotion_params)
         
-        # Apply Maya-level post-processing for realism
+        # Apply gentle volume boost instead of complex post-processing
         try:
-            print("🎭 Applying Maya-level audio post-processing...")
-            processed_audio = self.audio_processor.process(
-                base_audio,
-                prosodic_text=prosodic_text,
-                emotional_state=emotional_state,
-                add_reverb=True,
-                master_audio=True
-            )
-            print(f"   ✅ Enhanced audio: {len(base_audio)} → {len(processed_audio)} samples")
+            print("🔊 Applying gentle volume boost...")
+            # Gentle volume boost
+            processed_audio = base_audio * 1.2  # +1.6dB boost
+            print(f"   ✅ Volume boosted: {len(base_audio)} samples")
             return processed_audio
             
         except Exception as e:
-            print(f"⚠️  Post-processing failed: {e}")
-            print("   Returning base audio without enhancement")
+            print(f"⚠️  Volume boost failed: {e}")
             return base_audio
     
     def _select_engine(
@@ -181,52 +175,18 @@ class HybridVoiceEngine:
         conversation_context: Optional[list],
         speaker_id: str = "oviya_v1"
     ) -> str:
-        """Select the best engine for the given parameters."""
+        """Select CSM engine exclusively when available."""
         
         if forced_engine:
             return forced_engine
         
-        if self.default_engine == "auto":
-            # Auto-selection logic
-            
-            # Prefer CSM for conversational context
-            if conversation_context and len(conversation_context) > 0 and self.csm_available:
-                return "csm"
-            
-            # Prefer OpenVoiceV2 for voice cloning
-            if speaker_id != "oviya_v1" and self.openvoice_available:
-                return "openvoice"
-            
-            # Prefer CSM for complex emotions
-            emotion = emotion_params.get("emotion_label", "neutral")
-            if emotion in ["empathetic_sad", "calm_supportive"] and self.csm_available:
-                return "csm"
-            
-            # Prefer OpenVoiceV2 for expressive emotions
-            if emotion in ["joyful_excited", "playful"] and self.openvoice_available:
-                return "openvoice"
-            
-            # Default to available engine
-            if self.csm_available:
-                return "csm"
-            elif self.openvoice_available:
-                return "openvoice"
-            else:
-                return "mock"
-        
-        # Use default engine if available
-        if self.default_engine == "csm" and self.csm_available:
+        # Always prefer CSM when available
+        if self.csm_available:
             return "csm"
-        elif self.default_engine == "openvoice" and self.openvoice_available:
+        elif self.openvoice_available:
             return "openvoice"
         else:
-            # Fallback to available engine
-            if self.csm_available:
-                return "csm"
-            elif self.openvoice_available:
-                return "openvoice"
-            else:
-                return "mock"
+            return "mock"
     
     def _generate_with_csm(
         self, 
@@ -255,7 +215,9 @@ class HybridVoiceEngine:
                 "text": text,
                 "speaker": 0,  # CSM uses numeric speaker IDs
                 "max_audio_length_ms": 10000,
-                "reference_emotion": emotion_label  # Emotion reference for conditioning
+                "reference_emotion": emotion_label,  # Emotion reference for conditioning
+                "volume_boost": 1.2,  # Gentle volume boost from CSM
+                "normalize_audio": True  # Request normalized audio
             }
             
             # Call CSM service
@@ -275,6 +237,9 @@ class HybridVoiceEngine:
                     # Load audio
                     audio, sample_rate = torchaudio.load(audio_buffer)
                     audio = audio.squeeze(0)  # Remove channel dimension
+                    
+                    # Apply gentle volume boost to CSM output
+                    audio = audio * 1.5  # +3.5dB boost
                     
                     print(f"✅ CSM generated: {audio.shape[0]/sample_rate:.2f}s")
                     return audio.to(self.device)
