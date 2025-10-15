@@ -1,0 +1,246 @@
+{
+  "conversation_history": [
+    {
+      "user_message": "Hello, I'm Oviya! How can I help you today?",
+      "oviya_response": "Hello Oviya! Its great to hear such joy in your.",
+      "user_emotion": "joy",
+      "oviya_emotion": "#joy",
+      "timestamp": "2025-10-13T08:04:31.437412"
+    },
+    {
+      "user_message": "Hello, I'm Oviya! How can I help you today?",
+      "oviya_response": "Hello Oviya! Its great to see you too. I hope.",
+      "user_emotion": "joy",
+      "oviya_emotion": "#joy",
+      "timestamp": "2025-10-13T08:07:06.827847"
+    },
+    {
+      "user_message": "Hello, I'm Oviya! How can I help you today?",
+      "oviya_response": "Hello Oviya! Its great to meet you too. How can.",
+      "user_emotion": "joy",
+      "oviya_emotion": "#joy",
+      "timestamp": "2025-10-13T09:16:47.763980"
+    },
+    {
+      "user_message": "Hello",
+      "oviya_response": "Hello! How are you feeling today.",
+      "user_emotion": "neutral",
+      "oviya_emotion": "#calm",
+      "timestamp": "2025-10-13T09:22:37.006784"
+    },
+    {
+      "user_message": "Hello.",
+      "oviya_response": "Hello! I'm here to listen if you want to talk.",
+      "user_emotion": "frustrated",
+      "oviya_emotion": "#sad",
+      "timestamp": "2025-10-13T09:23:08.251606"
+    },
+    {
+      "user_message": "you.",
+      "oviya_response": "Hello there! Its great to have you here. How can.",
+      "user_emotion": "calm_supportive",
+      "oviya_emotion": "#calm",
+      "timestamp": "2025-10-13T09:23:22.516857"
+    },
+    {
+      "user_message": "Daniel here.",
+      "oviya_response": "oh no, Hello Daniel, I'm sorry to hear that you're feeling sad.",
+      "user_emotion": "empathetic_sad",
+      "oviya_emotion": "#calm",
+      "timestamp": "2025-10-13T09:23:46.508841"
+    },
+    {
+      "user_message": "of me.",
+      "oviya_response": "I'm sorry, I'm really sorry to hear that you're feeling this way.",
+      "user_emotion": "empathetic_sad",
+      "oviya_emotion": "#calm",
+      "timestamp": "2025-10-13T09:24:00.801458"
+    },
+    {
+      "user_message": "I'm",
+      "oviya_response": "I understand you're feeling frustrated, and its okay to feel.",
+      "user_emotion": "frustrated",
+      "oviya_emotion": "#sad",
+      "timestamp": "2025-10-13T09:24:13.203520"
+    },
+    {
+      "user_message": "Oh.",
+      "oviya_response": "I'm sorry, I'm sorry to hear that. Sometimes its okay just to.",
+      "user_emotion": "empathetic_sad",
+      "oviya_emotion": "#calm",
+      "timestamp": "2025-10-13T09:36:47.481768"
+    },
+    {
+      "user_message": "Hello.",
+      "oviya_response": "Hello! Its nice to connect with you today. How are.",
+      "user_emotion": "calm_supportive",
+      "oviya_emotion": "#calm",
+      "timestamp": "2025-10-13T09:37:15.088736"
+    },
+    {
+      "user_message": "Hello",
+      "oviya_response": "yeah, Hello! How are you doing today.",
+      "user_emotion": "neutral",
+      "oviya_emotion": "#calm",
+      "timestamp": "2025-10-13T09:43:10.001300"
+    },
+    {
+      "user_message": "Hello.",
+      "oviya_response": "Hello! I'm here to listen if you want to talk.",
+      "user_emotion": "frustrated",
+      "oviya_emotion": "#sad",
+      "timestamp": "2025-10-13T09:43:38.516313"
+    },
+    {
+      "user_message": "Thank you.",
+      "oviya_response": "oh no, you're welcome! Sometimes just knowing someone is here to listen.",
+      "user_emotion": "empathetic_sad",
+      "oviya_emotion": "#calm",
+      "timestamp": "2025-10-13T09:44:02.683261"
+    },
+    {
+      "user_message": "Can you listen me?",
+      "oviya_response": "Of course, I'm here to listen. Please share whats on.",
+      "user_emotion": "empathetic_sad",
+      "oviya_emotion": "#calm",
+      "timestamp": "2025-10-13T09:44:20.531993"
+    },
+    {
+      "user_message": "you",
+      "oviya_response": "I'm sorry to hear that you're feeling frustrated. Sometimes its.",
+      "user_emotion": "frustrated",
+      "oviya_emotion": "#sad",
+      "timestamp": "2025-10-13T09:44:37.848552"
+    },
+    {
+      "user_message": "Hello",
+      "oviya_response": "Hello! Its great to connect with you today. How are.",
+      "user_emotion": "neutral",
+      "oviya_emotion": "#calm",
+      "timestamp": "2025-10-13T09:50:18.315284"
+    },
+    {
+      "user_message": "Hello.",
+      "oviya_response": "Hello! Its great to connect with you today. How are.",
+      "user_emotion": "calm_supportive",
+      "oviya_emotion": "#calm",
+      "timestamp": "2025-10-13T09:50:32.557584"
+    },
+    {
+      "user_message": "Bye.",
+      "oviya_response": "I'm sorry, I'm here if you need to talk anytime. Take care,.",
+      "user_emotion": "empathetic_sad",
+      "oviya_emotion": "#calm",
+      "timestamp": "2025-10-13T09:50:57.613162"
+    },
+    {
+      "user_message": "Can you hear?",
+      "oviya_response": "I hear you, Of course, I can hear you. If you're feeling sad,.",
+      "user_emotion": "empathetic_sad",
+      "oviya_emotion": "#calm",
+      "timestamp": "2025-10-13T09:51:23.330449"
+    },
+    {
+      "user_message": "Can you hear me?",
+      "oviya_response": "I'm sorry, Yes, I can hear you. Sometimes its good to talk.",
+      "user_emotion": "empathetic_sad",
+      "oviya_emotion": "#calm",
+      "timestamp": "2025-10-13T09:51:34.651035"
+    },
+    {
+      "user_message": "Hello",
+      "oviya_response": "Hello! Nice to chat with you today. How are you.",
+      "user_emotion": "neutral",
+      "oviya_emotion": "#calm",
+      "timestamp": "2025-10-13T09:56:07.916647"
+    },
+    {
+      "user_message": "Hello.",
+      "oviya_response": "Hello! I'm here to listen if youd like to talk.",
+      "user_emotion": "frustrated",
+      "oviya_emotion": "#calm",
+      "timestamp": "2025-10-13T09:56:21.661705"
+    },
+    {
+      "user_message": "you.",
+      "oviya_response": "I hear you, I'm sorry to hear that you're feeling sad. Sometimes sharing.",
+      "user_emotion": "empathetic_sad",
+      "oviya_emotion": "#sad",
+      "timestamp": "2025-10-13T09:56:40.360713"
+    },
+    {
+      "user_message": "Can you hear me?",
+      "oviya_response": "I'm sorry, Yes, I can hear you. you're not alone; were here.",
+      "user_emotion": "concerned_anxious",
+      "oviya_emotion": "#calm",
+      "timestamp": "2025-10-13T09:57:02.297817"
+    },
+    {
+      "user_message": "Thank you.",
+      "oviya_response": "I hear you, you're welcome. Sometimes just acknowledging our feelings can bring a.",
+      "user_emotion": "empathetic_sad",
+      "oviya_emotion": "#calm",
+      "timestamp": "2025-10-13T09:57:18.140584"
+    },
+    {
+      "user_message": "Bye.",
+      "oviya_response": "I understand you're feeling frustrated, and its okay to share.",
+      "user_emotion": "frustrated",
+      "oviya_emotion": "#sad",
+      "timestamp": "2025-10-13T09:57:34.596653"
+    },
+    {
+      "user_message": "Hello",
+      "oviya_response": "Hello! How are you feeling today.",
+      "user_emotion": "neutral",
+      "oviya_emotion": "#calm",
+      "timestamp": "2025-10-13T12:07:33.371880"
+    },
+    {
+      "user_message": "Hello.",
+      "oviya_response": "Hello! I'm here if youd like to talk about whats.",
+      "user_emotion": "frustrated",
+      "oviya_emotion": "#calm",
+      "timestamp": "2025-10-13T12:07:45.922199"
+    },
+    {
+      "user_message": "you.",
+      "oviya_response": "I hear you, I'm sorry to hear that, but we can find ways.",
+      "user_emotion": "empathetic_sad",
+      "oviya_emotion": "#calm",
+      "timestamp": "2025-10-13T12:07:56.713547"
+    },
+    {
+      "user_message": "And that's it.",
+      "oviya_response": "mm-hmm, I'm here to listen if you need to share more,.",
+      "user_emotion": "calm_supportive",
+      "oviya_emotion": "#calm",
+      "timestamp": "2025-10-13T12:08:20.504134"
+    },
+    {
+      "user_message": "Can you hear me?",
+      "oviya_response": "that's tough, Of course, I can hear you. Sometimes just talking about.",
+      "user_emotion": "empathetic_sad",
+      "oviya_emotion": "#calm",
+      "timestamp": "2025-10-13T12:08:45.470772"
+    },
+    {
+      "user_message": "Hello",
+      "oviya_response": "I'm here to listen and help.",
+      "user_emotion": "neutral",
+      "oviya_emotion": "#neutral",
+      "timestamp": "2025-10-13T12:42:30.228570"
+    }
+  ],
+  "total_interactions": 33,
+  "last_interaction": "2025-10-13T12:42:30.228570",
+  "relationship_level": 0.3300000000000001,
+  "user_id": "web_user",
+  "last_updated": "2025-10-13T12:42:30.228611",
+  "emotion_preferences": {},
+  "interaction_style": "casual",
+  "topics_discussed": [],
+  "user_traits": {},
+  "preferences": {},
+  "metadata": {}
+}

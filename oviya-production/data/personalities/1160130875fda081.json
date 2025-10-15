@@ -1,0 +1,22 @@
+{
+  "conversation_history": [
+    {
+      "user_message": "Hello, I'm Oviya! How can I help you today?",
+      "oviya_response": "Hello Oviya! Its great to meet you too. How can.",
+      "user_emotion": "joy",
+      "oviya_emotion": "#joy",
+      "timestamp": "2025-10-13T07:42:57.600224"
+    }
+  ],
+  "total_interactions": 1,
+  "last_interaction": "2025-10-13T07:42:57.600224",
+  "relationship_level": 0.01,
+  "user_id": "test_user",
+  "last_updated": "2025-10-13T07:42:57.600255",
+  "emotion_preferences": {},
+  "interaction_style": "casual",
+  "topics_discussed": [],
+  "user_traits": {},
+  "preferences": {},
+  "metadata": {}
+}

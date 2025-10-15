@@ -16,6 +16,7 @@ from .epistemic_prosody import EpistemicProsodyAnalyzer
 from .emotion_transitions import EmotionTransitionSmoother
 from .backchannels import BackchannelSystem
 import time
+import asyncio
 
 
 class ProsodyMarkup:
@@ -483,14 +484,86 @@ class OviyaBrain:
                 
                 return parsed
             else:
-                print(f"⚠️ LLM error: {response.status_code} - {response.text}")
-                # Use mock responses for better context-aware fallback
+                print(f"⚠️ LLM error: {response.status_code} - {response.text[:200]}")
+                print(f"⚠️ Ollama URL: {self.ollama_url}")
+                print(f"⚠️ Retrying with simplified prompt...")
+                # Try a simpler request as fallback
+                try:
+                    simple_prompt = f"Respond to: {user_message}"
+                    simple_response = requests.post(
+                        self.ollama_url,
+                        json={"model": self.model_name, "prompt": simple_prompt, "stream": False},
+                        timeout=30
+                    )
+                    if simple_response.status_code == 200:
+                        text = simple_response.json().get("response", "")
+                        return {
+                            "text": text,
+                            "emotion": user_emotion or "neutral",
+                            "intensity": 0.5
+                        }
+                except:
+                    pass
+                # Last resort: mock response
+                print("❌ Using mock response as last resort")
                 return self._get_mock_response(user_message, user_emotion)
         
         except Exception as e:
             print(f"❌ Brain error: {e}")
-            # Use mock responses instead of fallback
+            import traceback
+            traceback.print_exc()
+            # Last resort: mock response
+            print("❌ Using mock response due to exception")
             return self._get_mock_response(user_message, user_emotion)
+
+    async def think_streaming(
+        self,
+        user_message: str,
+        user_emotion: Optional[str] = None,
+        conversation_history: Optional[list] = None
+    ):
+        """
+        Stream LLM tokens incrementally using Ollama streaming API.
+        Yields text token chunks as they arrive.
+        """
+        prompt = self._build_prompt(user_message, user_emotion, conversation_history)
+        llm_config = self.persona_config.get("llm_config", {})
+
+        payload = {
+            "model": self.model_name,
+            "prompt": prompt,
+            "stream": True,
+            "options": {
+                "temperature": llm_config.get("temperature", 0.7),
+                "top_p": llm_config.get("top_p", 0.9),
+                "num_predict": llm_config.get("max_tokens", 300),
+                "stop": llm_config.get("stop_sequences", ["User:", "\n\n"])
+            }
+        }
+
+        try:
+            with requests.post(self.ollama_url, json=payload, stream=True, timeout=60) as r:
+                r.raise_for_status()
+                for line in r.iter_lines(decode_unicode=True):
+                    if not line:
+                        await asyncio.sleep(0)
+                        continue
+                    # Ollama streams lines like: {"response":"token","done":false}
+                    try:
+                        data = json.loads(line)
+                        token = data.get("response", "")
+                        if token:
+                            yield token
+                        if data.get("done"):
+                            break
+                    except Exception:
+                        # Ignore malformed lines
+                        continue
+        except Exception as e:
+            print(f"⚠️ Streaming LLM error: {e}")
+            # Fallback: yield entire non-streaming response
+            resp = self.think(user_message, user_emotion, conversation_history)
+            yield resp.get("text", "")
     
     def _build_prompt(
         self, 

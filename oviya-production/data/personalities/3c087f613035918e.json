@@ -1,0 +1,22 @@
+{
+  "conversation_history": [
+    {
+      "user_message": "Hello",
+      "oviya_response": "Hello! Its nice to connect with you today. How are.",
+      "user_emotion": "neutral",
+      "oviya_emotion": "#calm",
+      "timestamp": "2025-10-13T09:41:17.237377"
+    }
+  ],
+  "total_interactions": 1,
+  "last_interaction": "2025-10-13T09:41:17.237377",
+  "relationship_level": 0.01,
+  "user_id": "pipeline_test",
+  "last_updated": "2025-10-13T09:41:17.237409",
+  "emotion_preferences": {},
+  "interaction_style": "casual",
+  "topics_discussed": [],
+  "user_traits": {},
+  "preferences": {},
+  "metadata": {}
+}

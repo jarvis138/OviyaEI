@@ -1,12 +1,12 @@
 """
-Hybrid Voice Engine - CSM + OpenVoiceV2 Integration
+Hybrid Voice Engine - CSM-1B + OpenVoiceV2 Integration
 
-This module integrates both CSM and OpenVoiceV2 for emotional voice generation.
-- CSM: Conversational consistency and context awareness
+This module integrates both CSM-1B (proper RVQ/Mimi) and OpenVoiceV2 for emotional voice generation.
+- CSM-1B: Conversational consistency, context awareness, RVQ tokens + Mimi decoder
 - OpenVoiceV2: Voice cloning and fine emotion control
 
 Setup:
-    CSM: Already running on Vast.ai (port 6006)
+    CSM-1B: Proper implementation with RVQ/Mimi (local or remote)
     OpenVoiceV2: git clone https://github.com/myshell-ai/OpenVoice.git external/OpenVoice
 """
 
@@ -15,11 +15,13 @@ import torchaudio
 import numpy as np
 import requests
 import json
-from typing import Dict, Optional, Tuple, Union
+from typing import Dict, Optional, Tuple, Union, List
 import sys
 from pathlib import Path
 import time
+import asyncio
 from .audio_postprocessor import AudioPostProcessor
+from .csm_1b_client import CSM1BClient
 
 
 class HybridVoiceEngine:
@@ -56,18 +58,29 @@ class HybridVoiceEngine:
         self._initialize_engines()
     
     def _initialize_engines(self):
-        """Initialize both CSM and OpenVoiceV2 engines."""
+        """Initialize both CSM-1B and OpenVoiceV2 engines."""
         
-        # Initialize CSM
-        print("\n[1/2] Checking CSM availability...")
-        self.csm_available = self._check_csm_availability()
+        # Initialize CSM-1B (proper RVQ/Mimi implementation)
+        print("\n[1/2] Initializing CSM-1B...")
+        try:
+            self.csm_client = CSM1BClient(
+                use_local_model=False,  # Use remote for now
+                remote_url=self.csm_url
+            )
+            health = self.csm_client.health_check()
+            self.csm_available = health['status'] in ['healthy', 'degraded']
+            print(f"   Status: {health}")
+        except Exception as e:
+            print(f"   ❌ CSM-1B initialization failed: {e}")
+            self.csm_available = False
+            self.csm_client = None
         
         # Initialize OpenVoiceV2
         print("\n[2/2] Checking OpenVoiceV2 availability...")
         self.openvoice_available = self._check_openvoice_availability()
         
         print(f"\n✅ Engine Status:")
-        print(f"   CSM: {'✅ Available' if self.csm_available else '❌ Unavailable'}")
+        print(f"   CSM-1B: {'✅ Available' if self.csm_available else '❌ Unavailable'}")
         print(f"   OpenVoiceV2: {'✅ Available' if self.openvoice_available else '❌ Unavailable'}")
         
         if not self.csm_available and not self.openvoice_available:
@@ -156,17 +169,24 @@ class HybridVoiceEngine:
             # Fallback to mock (no post-processing for mock)
             return self._generate_with_mock(text, emotion_params)
         
-        # Apply gentle volume boost instead of complex post-processing
+        # Apply strong volume boost for clearer audio
         try:
-            print("🔊 Applying gentle volume boost...")
-            # Gentle volume boost
-            processed_audio = base_audio * 1.2  # +1.6dB boost
-            print(f"   ✅ Volume boosted: {len(base_audio)} samples")
+            print("🔊 Applying volume boost...")
+            # Normalize and boost for clarity
+            audio_max = np.abs(base_audio).max()
+            if audio_max > 0:
+                # Normalize to 0.7 of max, then boost
+                normalized = base_audio / audio_max * 0.7
+                processed_audio = normalized * 3.0  # Strong boost for clarity
+            else:
+                processed_audio = base_audio * 3.0
+            
+            print(f"   ✅ Volume boosted: {len(base_audio)} samples (3x gain)")
             return processed_audio
             
         except Exception as e:
             print(f"⚠️  Volume boost failed: {e}")
-            return base_audio
+            return base_audio * 2.0  # At least 2x if processing fails
     
     def _select_engine(
         self, 
@@ -195,63 +215,94 @@ class HybridVoiceEngine:
         speaker_id: str,
         conversation_context: Optional[list]
     ) -> torch.Tensor:
-        """Generate speech using CSM."""
+        """
+        Generate speech using CSM-1B with proper RVQ/Mimi pipeline
+        
+        This now uses the proper CSM-1B client with:
+        - RVQ token generation
+        - Mimi decoder for audio
+        - Streaming support
+        - Conversational context conditioning
+        - Prosody/emotion control
+        """
         try:
-            # Test CSM connection first
-            health_url = self.csm_url.replace('/generate', '/health')
-            try:
-                health_response = requests.get(health_url, timeout=5)
-                if health_response.status_code != 200:
-                    raise Exception(f"CSM health check failed: {health_response.status_code}")
-            except Exception as e:
-                print(f"⚠️ CSM server not reachable: {e}")
-                print("   Falling back to mock TTS")
-                return self._generate_with_mock(text, emotion_params)
+            if not self.csm_client:
+                raise Exception("CSM-1B client not initialized")
             
-            # Prepare CSM payload with emotion reference
+            # Extract emotion label
             emotion_label = emotion_params.get("emotion_label", "neutral")
             
-            payload = {
-                "text": text,
-                "speaker": 0,  # CSM uses numeric speaker IDs
-                "max_audio_length_ms": 10000,
-                "reference_emotion": emotion_label,  # Emotion reference for conditioning
-                "volume_boost": 1.2,  # Gentle volume boost from CSM
-                "normalize_audio": True  # Request normalized audio
-            }
+            # Format conversation context for CSM-1B
+            context_for_csm = self._format_conversation_context(conversation_context)
             
-            # Call CSM service
-            response = requests.post(self.csm_url, json=payload, timeout=30)
+            print(f"🎤 Generating with CSM-1B (RVQ/Mimi)...")
+            print(f"   Text: '{text[:50]}...'")
+            print(f"   Emotion: {emotion_label}")
+            print(f"   Context turns: {len(context_for_csm) if context_for_csm else 0}")
             
-            if response.status_code == 200:
-                result = response.json()
-                audio_base64 = result.get("audio_base64")
-                
-                if audio_base64:
-                    # Decode base64 audio
-                    import base64
-                    import io
-                    audio_bytes = base64.b64decode(audio_base64)
-                    audio_buffer = io.BytesIO(audio_bytes)
-                    
-                    # Load audio
-                    audio, sample_rate = torchaudio.load(audio_buffer)
-                    audio = audio.squeeze(0)  # Remove channel dimension
-                    
-                    # Apply gentle volume boost to CSM output
-                    audio = audio * 1.5  # +3.5dB boost
-                    
-                    print(f"✅ CSM generated: {audio.shape[0]/sample_rate:.2f}s")
-                    return audio.to(self.device)
-                else:
-                    raise Exception("No audio in CSM response")
+            # Generate audio using async streaming
+            # We need to run the async generator in sync context
+            audio_chunks = []
+            
+            async def collect_chunks():
+                async for audio_chunk in self.csm_client.generate_streaming(
+                    text=text,
+                    emotion=emotion_label,
+                    speaker_id=0,
+                    conversation_context=context_for_csm
+                ):
+                    # Convert numpy to torch tensor
+                    audio_tensor = torch.from_numpy(audio_chunk).float()
+                    audio_chunks.append(audio_tensor)
+            
+            # Run async code in sync context
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # We're already in an async context, use nest_asyncio or create task
+                import nest_asyncio
+                nest_asyncio.apply()
+                loop.run_until_complete(collect_chunks())
             else:
-                raise Exception(f"CSM error: {response.status_code} - {response.text}")
+                asyncio.run(collect_chunks())
+            
+            if not audio_chunks:
+                raise Exception("No audio chunks generated")
+            
+            # Concatenate all audio chunks
+            combined_audio = torch.cat(audio_chunks, dim=0)
+            total_duration = combined_audio.shape[0] / 24000  # CSM outputs at 24kHz
+            
+            print(f"✅ CSM-1B generation complete: {total_duration:.2f}s total")
+            return combined_audio.to(self.device)
         
         except Exception as e:
-            print(f"❌ CSM generation failed: {e}")
+            print(f"❌ CSM-1B generation failed: {e}")
+            import traceback
+            traceback.print_exc()
             # Fallback to mock
             return self._generate_with_mock(text, emotion_params)
+    
+    def _format_conversation_context(
+        self,
+        conversation_context: Optional[list]
+    ) -> Optional[List[Dict]]:
+        """
+        Format conversation context for CSM-1B
+        
+        Converts Oviya's conversation format to CSM-1B's expected format
+        """
+        if not conversation_context:
+            return None
+        
+        formatted_context = []
+        for turn in conversation_context[-5:]:  # Last 5 turns
+            formatted_context.append({
+                "text": turn.get("text", ""),
+                "speaker_id": 1 if turn.get("speaker") == "user" else 0,
+                "timestamp": turn.get("timestamp", 0)
+            })
+        
+        return formatted_context
     
     def _generate_with_openvoice(
         self, 

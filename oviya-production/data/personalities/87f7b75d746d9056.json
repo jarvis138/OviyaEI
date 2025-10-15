@@ -1,0 +1,43 @@
+{
+  "conversation_history": [
+    {
+      "user_message": "Hello",
+      "oviya_response": "Hello! Its nice to connect with you. How are you.",
+      "user_emotion": "neutral",
+      "oviya_emotion": "#calm",
+      "timestamp": "2025-10-13T09:21:10.892481"
+    },
+    {
+      "user_message": "Hello",
+      "oviya_response": "right, Hello! Its nice to connect with you. How are you.",
+      "user_emotion": "neutral",
+      "oviya_emotion": "#joy",
+      "timestamp": "2025-10-13T09:49:18.526687"
+    },
+    {
+      "user_message": "Hello",
+      "oviya_response": "Hello! How are you feeling today.",
+      "user_emotion": "neutral",
+      "oviya_emotion": "#calm",
+      "timestamp": "2025-10-13T09:53:48.785885"
+    },
+    {
+      "user_message": "Hello",
+      "oviya_response": "Hello! How are you feeling today.",
+      "user_emotion": "neutral",
+      "oviya_emotion": "#calm",
+      "timestamp": "2025-10-13T09:55:18.098734"
+    }
+  ],
+  "total_interactions": 4,
+  "last_interaction": "2025-10-13T09:55:18.098734",
+  "relationship_level": 0.04,
+  "user_id": "test_audio_user",
+  "last_updated": "2025-10-13T09:55:18.098749",
+  "emotion_preferences": {},
+  "interaction_style": "casual",
+  "topics_discussed": [],
+  "user_traits": {},
+  "preferences": {},
+  "metadata": {}
+}

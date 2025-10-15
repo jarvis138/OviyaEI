@@ -6,7 +6,8 @@ RTX 5880 Ada Instance
 
 # Cloudflare Tunnel URLs (RTX 5880 Ada - VastAI)
 OLLAMA_URL = "https://prime-show-visit-lock.trycloudflare.com/api/generate"
-CSM_URL = "https://astronomy-initiative-paso-cream.trycloudflare.com/generate"
+CSM_URL = "https://josh-strong-iron-conventional.trycloudflare.com/generate"  # ✅ REAL CSM-1B + Mimi decoder
+CSM_STREAM_URL = "https://josh-strong-iron-conventional.trycloudflare.com/generate/stream"  # ✅ Streaming endpoint
 WHISPERX_URL = "https://msgid-enquiries-williams-lands.trycloudflare.com"
 
 # WhisperX API endpoints
