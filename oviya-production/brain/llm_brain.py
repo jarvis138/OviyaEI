@@ -33,6 +33,11 @@ except Exception:
     except Exception:
         class _Noop:
             def observe(self, *a, **k):
+                """
+                No-op observer hook intended to be overridden by subclasses.
+                
+                Accepts arbitrary positional and keyword arguments and ignores them; provided as a stable hook for subclasses to implement custom observation behavior.
+                """
                 pass
             def inc(self, *a, **k):
                 pass
@@ -358,7 +363,13 @@ class OviyaBrain:
         persona_config_path: str = "config/oviya_persona.json",
         ollama_url: str = "https://70af8de9eddf5b.lhr.life/api/generate"
     ):
-        """Initialize Oviya's brain."""
+        """
+        Initialize the OviyaBrain instance and instantiate subsystems for generation, emotion memory, prosody, safety, and optional personality conditioning.
+        
+        Parameters:
+            persona_config_path (str): Path to the persona JSON configuration used to set system prompts, model defaults, situational guidance, and feature flags. Defaults to "config/oviya_persona.json".
+            ollama_url (str): Base URL for the Ollama generation API to be used for LLM requests. Defaults to "https://70af8de9eddf5b.lhr.life/api/generate".
+        """
         self.persona_config = self._load_persona_config(persona_config_path)
         self.ollama_url = ollama_url
         self.model_name = self.persona_config.get("llm_config", {}).get("model", "qwen2.5:7b")
@@ -429,15 +440,28 @@ class OviyaBrain:
         conversation_history: Optional[list] = None
     ) -> Dict:
         """
-        Generate response with emotion label.
+        Generate a context-aware conversational response enriched with emotion, intensity, prosody, and related metadata.
         
-        Args:
-            user_message: User's input text
-            user_emotion: Detected user emotion (optional)
-            conversation_history: Recent conversation context (optional)
+        Parameters:
+            user_message (str): The user's input text to respond to.
+            user_emotion (Optional[str]): Optional detected emotion label for the user (e.g., "sad", "joyful") used to steer tone.
+            conversation_history (Optional[list]): Optional recent conversation turns (most recent last) to provide context.
         
         Returns:
-            Dict with text, emotion, intensity, style_hint
+            Dict: A response dictionary. Typical keys include:
+                - text (str): The cleaned response text suitable for display or TTS.
+                - emotion (str): The emotion label assigned to the response.
+                - intensity (float): Emotional intensity on a 0.0–1.0 scale.
+                - style_hint (Optional[str]): Suggested expressive style or voice guidance.
+                - prosodic_text (str): Response annotated with prosodic markup for speech synthesis.
+                - emotional_state (dict): Updated emotional memory/state after this response.
+                - contextual_modifiers (dict): Modifiers such as energy_scale, pace_scale, warmth_scale.
+                - epistemic_analysis (Optional[dict]): Epistemic prosody analysis if available.
+                - transition_info (Optional[dict]): Info about emotion transitions and smoothing.
+                - has_backchannel (bool): Whether a backchannel was injected.
+                - backchannel_type (Optional[str]): Type of backchannel injected when present.
+        
+            Fields may vary depending on safety routing, LLM parsing success, or fallback/mock response paths.
         """
         # Increment conversation turn counter
         self.conversation_turn_count += 1
@@ -652,7 +676,17 @@ class OviyaBrain:
             return self._get_mock_response(user_message, user_emotion)
 
     def _retrieve_similar(self, query: str) -> list:
-        """Very small in-process RAG using FAISS if available (best-effort)."""
+        """
+        Retrieve up to three memory lines from a local memory file that are semantically similar to the given query.
+        
+        Performs a best-effort, in-process semantic search using SentenceTransformer embeddings and a FAISS inner-product index. If the environment does not provide FAISS, the memory file is missing/empty, or any step fails, the function returns an empty list.
+        
+        Parameters:
+            query (str): The textual query to match against stored memory lines.
+        
+        Returns:
+            list: A list of at most three memory lines (strings) ranked by similarity; only lines with similarity >= 0.30 are returned. Empty list on failure or when no matches meet the threshold.
+        """
         try:
             import faiss  # type: ignore
             import numpy as np
@@ -694,8 +728,12 @@ class OviyaBrain:
         conversation_history: Optional[list] = None
     ):
         """
-        Stream LLM tokens incrementally using Ollama streaming API.
-        Yields text token chunks as they arrive.
+        Stream tokens from the configured Ollama LLM and yield text chunks as they arrive.
+        
+        May update the brain's internal personality vector when personality conditioning is enabled. If the auto-decider signals a safety issue, yields the safety response text and stops. On streaming errors, falls back to the non-streaming thinker and yields the final response text.
+        
+        Returns:
+            str: Successive text token chunks from the LLM. In error or fallback cases a full response string or a safety-response string may be yielded.
         """
         dec = self.auto_decider.decide(
             user_message,
@@ -774,12 +812,39 @@ class OviyaBrain:
         conversation_history: Optional[list],
         auto: Optional[dict] = None
     ) -> str:
-        """Build the prompt with situational empathy (Rogers + ToM)."""
+        """
+        Assemble the LLM instruction prompt using Rogers-style empathy and Theory-of-Mind framing, situational guidance from the persona, recent conversation context, and a strict JSON-output instruction block.
+        
+        Parameters:
+            user_message (str): The user's latest utterance.
+            user_emotion (Optional[str]): Detected emotion to be used as context only (must not be labeled back in the response).
+            conversation_history (Optional[list]): Recent conversation turns; the function will include up to the last three turns and may inspect prior AI turns for expressivity feedback. Turns may be strings or dicts with a "text" field.
+            auto (Optional[dict]): Optional precomputed auto-decision hints. Recognized keys:
+                - "situation": override situation classification
+                - "emotion_hint": preferred emotion label
+                - "hybrid_hint": hybrid tone hint (context-only)
+                - "intensity_hint": numeric intensity to suggest in the output JSON
+                - "style_hint": optional prosody/style guidance
+        
+        Returns:
+            str: A single prompt string combining system prompt, empathy/ToM framing, situational guidance and rules, recent context, the user message, and an exact JSON response schema for the LLM to follow.
+        """
 
         # Heuristic situation classifier (lightweight, context-driven)
         msg = (user_message or "").lower()
 
         def classify_situation(text: str) -> str:
+            """
+            Classifies a user's message into a predefined situational category based on keyword matches.
+            
+            Performs an ordered, keyword-based scan of the input text and returns the first matching situation category; if no keywords match, returns "casual_chat".
+            
+            Parameters:
+                text (str): The user message to classify.
+            
+            Returns:
+                str: One of the situation identifiers (e.g., "difficult_news", "frustration_technical", "celebrating_success", "seeking_advice", "expressing_fear", "apology", "conflict", "boundaries", "burnout", "loneliness", "grief_loss", "breakup_heartbreak", "health_concern", "finances_stress", "social_anxiety", "imposter_syndrome", "time_pressure_deadlines", "creative_block", "parenting_stress", "study_exam_stress", "travel_disruption", "customer_service_issue", "self_criticism", "failure_setback", "excitement_future_plans", "gratitude", or "casual_chat" when no category matches).
+            """
             if any(k in text for k in ["accident", "passed away", "lost my", "hospital", "bad news", "diagnosed"]):
                 return "difficult_news"
             if any(k in text for k in ["debug", "bug", "fix", "stuck", "error", "hours", "compile", "build failed"]):
@@ -845,6 +910,15 @@ class OviyaBrain:
         proxies = (esm.get("proxies") or {})
 
         def map_proxy(em: str) -> str:
+            """
+            Map an emotion key to its proxy label using the module-level `proxies` mapping.
+            
+            Parameters:
+                em (str): Emotion identifier to look up in the proxy mapping.
+            
+            Returns:
+                mapped_emotion (str): The proxy label from `proxies` when present, otherwise the original `em`.
+            """
             return proxies.get(em, em)
 
         default_emotion = (auto or {}).get("emotion_hint") or map_proxy(guidance.get("default_emotion", "neutral"))
@@ -918,9 +992,22 @@ Rules:
     
     def _parse_llm_output(self, llm_output: str) -> Dict:
         """
-        Parse LLM output to structured format.
+        Extracts and enriches structured response data from raw LLM output.
         
-        Tries to extract JSON, falls back to text parsing if needed.
+        Parses a JSON object from the LLM output when present and validates/normalizes required fields; if parsing fails, falls back to treating the full output as plain text. In both paths the function ensures a short user-facing text, updates cross-turn emotional memory, generates prosodic markup, performs epistemic-state analysis, applies unconditional-regard and persona-consistency adjustments, runs optional harm- and bias-filtering, injects an emotion style hint when available, applies hybrid intensity adjustments, and attaches auxiliary metadata used by downstream systems.
+        
+        Returns:
+            Dict: A dictionary containing at minimum:
+                - text (str): Normalized, short response text.
+                - emotion (str): The labeled emotion.
+                - intensity (float): Emotion intensity in [0.0, 1.0].
+                - style_hint (str): Optional prosody/style hint (may be empty).
+                - prosodic_text (str): Text annotated with prosodic markup for TTS.
+                - emotional_state (dict): Snapshot of updated emotional memory/state.
+                - contextual_modifiers (dict): Modifiers derived from emotional memory (pace, energy, warmth).
+                - epistemic_analysis (dict): Result of epistemic-state analysis (present when parsed).
+                - transition_info (dict): Information about emotion transition/blending (present when parsed).
+                - personality_vector (optional): Attached personality vector when personality conditioning is enabled.
         """
         # Try to parse as JSON first
         try:
@@ -1062,7 +1149,14 @@ Rules:
         }
     
     def _ensure_short_text(self, text: str) -> str:
-        """Ensure text is conversational length (keep sentences; cap reasonably)."""
+        """
+        Shortens and normalizes generated text to a conversational length.
+        
+        Keeps up to four sentences, limits output to about 80 words, removes stray quotes and surrounding whitespace, and normalizes common contractions.
+        
+        Returns:
+            A normalized, shortened string suitable for user-facing output.
+        """
         # Normalize quotes/whitespace
         text = text.strip().replace('"', '').replace("'", "")
 
@@ -1082,7 +1176,15 @@ Rules:
         return clipped
     
     def _fix_contractions(self, text: str) -> str:
-        """Fix common contraction issues."""
+        """
+        Normalize common English contractions by correcting frequent mis-tokenized forms (e.g., "Im" -> "I'm", "youre" -> "you're").
+        
+        Parameters:
+            text (str): Input string that may contain unnormalized contraction tokens.
+        
+        Returns:
+            str: The input text with common contractions corrected.
+        """
         contractions = {
             r'\bIm\b': "I'm",
             r'\byoure\b': "you're",
@@ -1284,4 +1386,3 @@ if __name__ == "__main__":
         print(f"  Emotion: {response['emotion']}")
         print(f"  Intensity: {response['intensity']}")
         print()
-

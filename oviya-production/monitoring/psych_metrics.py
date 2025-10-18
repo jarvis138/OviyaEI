@@ -10,12 +10,25 @@ try:
     VECTOR_ENTROPY = Histogram('oviya_personality_vector_entropy', 'Personality vector entropy', buckets=(0.0,0.2,0.4,0.6,0.8,1.0,1.2,1.4,1.6))
 except Exception:
     class _Noop:
-        def observe(self, *a, **k): pass
-        def inc(self, *a, **k): pass
+        def observe(self, *a, **k): """
+No-op metric observer that accepts any arguments and performs no action.
+
+This method exists to provide the same call signature as real metric `observe` implementations while intentionally ignoring all positional and keyword arguments.
+
+Parameters:
+    *a: Any positional arguments are accepted and ignored.
+    **k: Any keyword arguments are accepted and ignored.
+"""
+pass
+        def inc(self, *a, **k): """
+No-op increment method that accepts any positional and keyword arguments and performs no action.
+
+This method exists to match the interface of a metrics counter so it can be called with the same arguments as a real counter without side effects.
+"""
+pass
     BID_ACK_MS = _Noop()
     VALIDATION_FIRST = _Noop()
     MEMORY_HIT = _Noop()
     SAFETY_NUDGE = _Noop()
     RESPONSE_LEN = _Noop()
-
 

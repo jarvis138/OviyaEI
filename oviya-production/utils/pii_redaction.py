@@ -7,11 +7,19 @@ RE_ADDR = re.compile(r"\b\d{1,5}\s+\w+\s+(?:St|Street|Ave|Avenue|Rd|Road|Blvd|La
 
 
 def redact(text: str) -> str:
+    """
+    Redacts email addresses, phone numbers, and street addresses from the given text.
+    
+    Parameters:
+        text (str | None): Input text to redact. If falsy (e.g., None or empty string), the input is returned unchanged.
+    
+    Returns:
+        str: The text with detected emails replaced by "<redacted_email>", phone numbers by "<redacted_phone>", and addresses by "<redacted_address>".
+    """
     if not text:
         return text
     t = RE_EMAIL.sub("<redacted_email>", text)
     t = RE_PHONE.sub("<redacted_phone>", t)
     t = RE_ADDR.sub("<redacted_address>", t)
     return t
-
 

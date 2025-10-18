@@ -10,6 +10,16 @@ class EmotionDimensions(BaseModel):
     @root_validator(skip_on_failure=True)
     def check_consistency(cls, values):
         # Placeholder for cross-checks with emotion_label
+        """
+        Perform cross-field consistency checks for emotion dimension values relative to other sample fields.
+        
+        Parameters:
+            cls: The EmotionDimensions class.
+            values (dict): A mapping of field names to their validated values for the entire model instance.
+        
+        Returns:
+            dict: The (possibly adjusted) field-value mapping to continue model validation.
+        """
         return values
 
 
@@ -51,6 +61,21 @@ class OviyaSample(BaseModel):
 
     @validator('text', 'response')
     def check_text_quality(cls, v):
+        """
+        Validate that a text value has at least two words and is not all uppercase.
+        
+        Returns the trimmed string when valid; returns None unchanged.
+        
+        Parameters:
+            v (str | None): The text value to validate.
+        
+        Returns:
+            str | None: The trimmed text value, or None if input was None.
+        
+        Raises:
+            ValueError: If the text contains fewer than two words.
+            ValueError: If the text is entirely uppercase.
+        """
         if v is None:
             return v
         if len(v.split()) < 2:
@@ -61,12 +86,47 @@ class OviyaSample(BaseModel):
 
     @root_validator(skip_on_failure=True)
     def check_response_completeness(cls, values):
+        """
+        Ensure that when a `response` value is provided the corresponding `empathy_type` is also present.
+        
+        Parameters:
+            values (dict): Mapping of field names to their current validated values.
+        
+        Returns:
+            dict: The unchanged values mapping.
+        
+        Raises:
+            ValueError: If `response` is present and `empathy_type` is missing.
+        """
         if values.get('response') and not values.get('empathy_type'):
             raise ValueError("Response must have empathy_type")
         return values
 
 
 def validate_parquet_batch(filepath: str, sample_rate: float = 1.0, strict: bool = True):
+    """
+    Validate a Parquet file of records against the OviyaSample schema and collect summary statistics.
+    
+    Parameters:
+        filepath (str): Path to the Parquet file to validate.
+        sample_rate (float): Fraction of rows to randomly sample from the file (0 < sample_rate <= 1.0).
+        strict (bool): If True, raise a ValueError on the first validation failure; if False, collect errors and continue.
+    
+    Returns:
+        result (dict): Summary of validation containing:
+            - filepath (str): The input filepath.
+            - valid (bool): True if no validation errors were found, False otherwise.
+            - errors (List[str]): Up to 100 error messages, each indicating row index and error text.
+            - warnings (List[str]): High-level dataset warnings (e.g., imbalance alerts).
+            - statistics (dict): Aggregated statistics including:
+                - total_rows (int): Number of rows processed (after sampling).
+                - validated_rows (int): Number of rows that passed validation.
+                - error_count (int): Number of rows that failed validation.
+                - culture_distribution (dict): Counts per `culture` value if present.
+                - emotion_distribution (dict): Counts per `emotion_label` value if present.
+                - missing_responses (int): Count of missing `response` values if present.
+                - avg_quality_score (float): Mean of `quality_score` if present, otherwise 0.0.
+    """
     import pandas as pd
     import json as _json
     df = pd.read_parquet(filepath)
@@ -122,5 +182,4 @@ if __name__ == '__main__':
             if not ok:
                 all_valid = False
     sys.exit(0 if all_valid else 1)
-
 

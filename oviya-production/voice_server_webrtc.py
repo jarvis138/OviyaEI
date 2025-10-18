@@ -30,6 +30,17 @@ import os
 try:
     import jwt  # PyJWT
     def verify_jwt(token: str) -> bool:
+        """
+        Validate a JWT string against the configured OVIYA_SECRET.
+        
+        If the environment variable OVIYA_SECRET is not set or empty, validation is bypassed and the token is treated as valid.
+        
+        Parameters:
+            token (str): JWT string to validate (expected HS256-signed when OVIYA_SECRET is set).
+        
+        Returns:
+            `true` if the token is valid or if no secret is configured, `false` otherwise.
+        """
         secret = os.getenv("OVIYA_SECRET", "")
         if not secret:
             return True
@@ -40,6 +51,15 @@ try:
             return False
 except Exception:
     def verify_jwt(token: str) -> bool:
+        """
+        Validate a JWT bearer token for server requests (no-op in this build).
+        
+        Parameters:
+            token (str): JWT bearer token string to validate.
+        
+        Returns:
+            bool: `True` if the token is accepted (currently always `True`), `False` otherwise.
+        """
         return True
 try:
     from prometheus_client import Summary, CONTENT_TYPE_LATEST, generate_latest
@@ -419,6 +439,12 @@ class OviyaVoiceConnection:
     """
     
     def __init__(self, pc: RTCPeerConnection):
+        """
+        Initialize the voice connection manager, create its speech/ML subsystems, and attach the outgoing audio track to the provided RTCPeerConnection.
+        
+        Parameters:
+            pc (RTCPeerConnection): The peer connection that will carry media; an audio output track is created and added to this connection.
+        """
         self.pc = pc
         self.vad = SileroVAD()
         self.whisperx = RemoteWhisperXClient()
@@ -455,8 +481,15 @@ class OviyaVoiceConnection:
     
     async def process_audio_frame(self, frame: AudioFrame):
         """
-        Process incoming audio frame from user's microphone
-        This is called for EVERY audio frame (every 20-30ms)
+        Handle a single incoming microphone audio frame: preprocess audio, run voice-activity detection, request interruption if the user starts speaking, and start asynchronous transcription when a speech segment ends.
+        
+        Parameters:
+            frame (AudioFrame): An incoming WebRTC audio frame containing PCM samples from the user's microphone.
+        
+        Notes:
+            - Preprocessing includes high-pass filtering, light spectral noise gating, and RMS normalization before VAD.
+            - If speech is detected while the server is generating audio, an interrupt is requested and server playback is faded/cleared.
+            - When the VAD signals end-of-speech with accumulated audio, this method schedules self.handle_user_utterance(...) as an asyncio task.
         """
         # Don't process if connection is closed
         if self.is_closed:
@@ -528,7 +561,20 @@ class OviyaVoiceConnection:
     
     async def handle_user_utterance(self, audio: np.ndarray):
         """
-        Complete turn: transcribe → think → speak
+        Handle a complete user turn: transcribe the provided audio, generate a conversational response, and stream synthesized speech back to the client.
+        
+        This method:
+        - Transcribes the input audio into text.
+        - Appends the user's utterance to conversation_history.
+        - Obtains a response from the LLM (preferring streaming then falling back to a non-streaming call).
+        - Appends the model's response to conversation_history and trims history to recent turns.
+        - Applies humanlike prosody adjustments and streams TTS audio to the audio_output_track.
+        - Observes optional latency metrics (STT, LLM, TTS, time-to-first-audio) when available.
+        - Responds to interruption requests or connection closure by fading out and stopping TTS.
+        - Ensures internal processing flags (is_processing, interrupt_requested) are reset when complete.
+        
+        Parameters:
+            audio (np.ndarray): Mono audio samples at 16 kHz in float format (typical range -1.0 to 1.0). This is the user's recorded utterance to transcribe and respond to.
         """
         if self.is_closed:
             print("⚠️  Connection closed, skipping...")
@@ -682,8 +728,13 @@ peer_connections = set()
 @app.post("/api/voice/offer")
 async def handle_offer(request: Request):
     """
-    WebRTC signaling endpoint - handles peer connection setup
-    Client sends SDP offer, server responds with SDP answer
+    Handle an incoming WebRTC SDP offer, establish an RTCPeerConnection with ICE servers and track handlers, and return an SDP answer.
+    
+    Parameters:
+        request (fastapi.Request): HTTP request whose JSON body must include "sdp" and "type" for the SDP offer and may include an optional "token" for JWT authentication.
+    
+    Returns:
+        fastapi.responses.JSONResponse: JSON with keys "sdp" and "type" containing the server SDP answer on success; returns a 401 response with {"error": "unauthorized"} if JWT validation fails, or a 500 response with {"error": "<message>"} on internal error.
     """
     try:
         params = await request.json()
@@ -1115,7 +1166,15 @@ async def root():
 
 @app.get("/health")
 async def health():
-    """Health check endpoint"""
+    """
+    Report service health status and configured backend endpoints.
+    
+    Returns:
+        dict: A mapping with keys:
+            - "status": health state string (e.g., "healthy").
+            - "service": human-readable service name.
+            - "endpoints": dict containing backend URLs with keys "whisperx", "ollama", and "csm".
+    """
     return {
         "status": "healthy",
         "service": "Oviya WebRTC Voice Server",
@@ -1129,6 +1188,17 @@ async def health():
 
 @app.get("/worklet.js")
 async def worklet_js():
+    """
+    Serve the AudioWorkletProcessor JavaScript used by the client for RMS-based level metering.
+    
+    The response body contains a small AudioWorkletProcessor implementation registered as 'oviya-meter' that
+    computes a smoothed RMS level from the first input channel and posts periodic messages to the main thread.
+    
+    Returns:
+        Response: FastAPI Response with JavaScript content that registers the processor. Posted messages from
+        the processor have the shape `{"level": number}` where `level` is a soft-clipped value approximately
+        in the range 0.0–1.0 suitable for UI level visualization.
+    """
     js = """
 class OviyaMeterProcessor extends AudioWorkletProcessor {
   constructor() {
@@ -1159,6 +1229,14 @@ registerProcessor('oviya-meter', OviyaMeterProcessor);
 
 @app.get('/metrics')
 async def metrics():
+    """
+    Serve Prometheus metrics in the Prometheus text exposition format.
+    
+    Returns:
+        Response: HTTP response with the Prometheus metrics payload and content type
+        `CONTENT_TYPE_LATEST` when metrics generation succeeds; otherwise an empty
+        plain-text Response.
+    """
     try:
         return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
     except Exception:
@@ -1167,7 +1245,11 @@ async def metrics():
 
 @app.on_event("shutdown")
 async def on_shutdown():
-    """Clean up connections on shutdown"""
+    """
+    Close all active WebRTC peer connections and clear the global peer_connections set during server shutdown.
+    
+    Awaits each connection's close coroutine to ensure orderly teardown and prints a shutdown-complete message.
+    """
     coros = [pc.close() for pc in peer_connections]
     await asyncio.gather(*coros)
     peer_connections.clear()
@@ -1195,4 +1277,3 @@ if __name__ == "__main__":
         port=8000,
         log_level="info"
     )
-

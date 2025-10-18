@@ -20,6 +20,15 @@ class UnconditionalRegardEngine:
     ]
 
     def apply(self, text: str) -> str:
+        """
+        Transform text to remove judgmental phrases and prepend a normalization sentence when self-critical language is detected.
+        
+        Parameters:
+            text (str): Input string to process.
+        
+        Returns:
+            str: The input with any phrases from `NEVER_SAY` removed and, if any `SHAME_MARKERS` are present in the original text, prefixed with "A lot of people struggle with feelings like that. " unless that prefix (case-insensitive) is already present.
+        """
         t = text.strip()
         lower = t.lower()
         # Remove never-say phrases if present
@@ -31,5 +40,4 @@ class UnconditionalRegardEngine:
             if not t.lower().startswith("a lot of people"):
                 t = prefix + t
         return t
-
 

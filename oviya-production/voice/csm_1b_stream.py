@@ -238,24 +238,20 @@ class CSMRVQStreamer:
         top_p: float = 0.95
     ) -> AsyncGenerator[np.ndarray, None]:
         """
-        Generate audio with true RVQ-level streaming
+        Stream audio by generating RVQ tokens, decoding them incrementally with Mimi, and yielding PCM chunks for immediate playback.
         
-        Paper Architecture:
-        "The first multimodal backbone processes interleaved text and audio
-        to model the zeroth codebook. The second audio decoder uses a distinct
-        linear head for each codebook and models the remaining N – 1 codebooks."
+        Generates RVQ codes from the provided prompt (including optional conversation context and emotion), decodes them in small windows (typically 2–4 RVQ frames) and yields successive PCM audio segments to minimize time-to-first-audio and overall latency. Streaming may stop early if request_stop() is called.
         
-        Streaming Strategy:
-        1. Generate RVQ tokens (CSM backbone → decoder)
-        2. Buffer 2-4 RVQ frames (160-320ms)
-        3. Decode with Mimi incrementally
-        4. Yield PCM chunks immediately
+        Parameters:
+            text (str): The prompt text to generate audio for.
+            emotion (str): Emotion tag inserted into the prompt (e.g., "neutral", "joyful").
+            conversation_context (Optional[List[Dict]]): Recent conversation turns used to build the prompt; each turn is expected to be a dict with speaker/content fields.
+            max_new_tokens (int): Maximum number of RVQ tokens/frames to generate.
+            temperature (float): Sampling temperature for generation.
+            top_p (float): Nucleus sampling probability for generation.
         
-        Yields:
-            PCM audio chunks (float32, 24kHz) every 160-320ms
-            
-        Paper Finding: "This design introduces significant infrastructure
-        challenges during training... but enables low-latency generation."
+        Returns:
+            PCM audio chunks (float32, 24 kHz): An async generator that yields successive decoded audio segments (typically 160–320 ms each) suitable for streaming playback.
         """
         # Reset any previous stop request
         self._reset_stop()
@@ -460,4 +456,3 @@ async def test_streaming():
 
 if __name__ == "__main__":
     asyncio.run(test_streaming())
-

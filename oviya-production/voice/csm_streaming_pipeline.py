@@ -5,14 +5,32 @@ import numpy as np
 class CSMStreamingPipeline:
     def __init__(self, mimi_model: Optional[object] = None, csm_decoder: Optional[object] = None):
         # Expect initialized Mimi and CSM decoder passed in
+        """
+        Initialize the streaming pipeline with optional Mimi model and CSM decoder.
+        
+        Parameters:
+            mimi_model (Optional[object]): An initialized Mimi model instance used to decode acoustic tokens into PCM. May be None to enable fallback behavior.
+            csm_decoder (Optional[object]): An initialized CSM decoder instance that generates/refines acoustic tokens. May be None to enable fallback behavior.
+        
+        Notes:
+            The constructor stores the provided objects on the instance without validation.
+        """
         self.mimi = mimi_model
         self.decoder = csm_decoder
 
     def generate_stream(self, semantic_tokens: np.ndarray, style_vec: np.ndarray, fast_start: bool = True) -> Generator[np.ndarray, None, None]:
         """
-        Stream decoded PCM from semantic + acoustic tokens using Mimi + CSM.
-        semantic_tokens: np.ndarray (interleaved text semantics or prepared semantic sequence)
-        style_vec: np.ndarray length 5
+        Stream decoded PCM audio from semantic tokens and a style vector using the Mimi model and CSM decoder.
+        
+        This generator yields consecutive PCM chunks (numpy.float32 arrays) representing decoded audio. If the pipeline components are unavailable or decoding fails, yields a short sequence of safe placeholder tones instead.
+        
+        Parameters:
+            semantic_tokens (np.ndarray): Interleaved semantic token sequence used as decoder input.
+            style_vec (np.ndarray): Length-5 style conditioning vector.
+            fast_start (bool): If True, request fewer initial codebooks to reduce time-to-first-byte, with optional later refinement to full quality.
+        
+        Returns:
+            Generator[np.ndarray, None, None]: A generator that yields PCM chunks (float32 numpy arrays, produced at a 24 kHz sample rate).
         """
         if self.mimi is None or self.decoder is None:
             # Fallback to tone beep (dev)
@@ -66,5 +84,4 @@ class CSMStreamingPipeline:
         for i in range(50):
             chunk = (0.02 * np.sin(2 * np.pi * 330 * (i+1) * t)).astype(np.float32)
             yield chunk
-
 

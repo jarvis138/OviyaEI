@@ -11,6 +11,19 @@ class BidResponseSystem:
     """
 
     def detect_bid(self, text: str, prosody: Dict, pause_ms: float) -> str:
+        """
+        Classifies the communicative bid expressed by the given text and prosodic cues.
+        
+        Determination is based on punctuation, normalized text content, prosodic features (pitch variability and energy), and pause duration to identify expressive categories such as excitement, distress, requests for validation, presence checks, or vulnerability sharing.
+        
+        Parameters:
+            text (str): The spoken or typed utterance to analyze.
+            prosody (Dict): Prosodic feature map; expected keys include `"pitch_var"` (numeric) and `"energy"` (numeric). Missing values are treated with sensible defaults.
+            pause_ms (float): Duration of the pause before or after the utterance in milliseconds.
+        
+        Returns:
+            str: One of the bid type labels: `"excitement_share"`, `"distress_signal"`, `"seeking_validation"`, `"testing_presence"`, `"sharing_vulnerability"`, or `"none"` when no category matches.
+        """
         t = (text or "").strip()
         lower = t.lower()
         pitch_var = float(prosody.get("pitch_var", 0.0)) if prosody else 0.0
@@ -29,6 +42,19 @@ class BidResponseSystem:
         return "none"
 
     def micro_ack(self, bid_type: str) -> str:
+        """
+        Selects a brief micro-acknowledgment phrase appropriate to the detected bid type.
+        
+        Parameters:
+            bid_type (str): The detected bid category; expected values include
+                "excitement_share", "distress_signal", "seeking_validation",
+                "testing_presence", and "sharing_vulnerability". Any other value
+                results in a neutral empty acknowledgment.
+        
+        Returns:
+            str: A single acknowledgment phrase corresponding to `bid_type`, or an
+            empty string if `bid_type` is unrecognized.
+        """
         options = {
             "excitement_share": ["Tell me more!", "That sounds amazing—go on!", "I want to hear everything."],
             "distress_signal": ["I'm here.", "Take your time.", "I'm listening."],
@@ -38,5 +64,4 @@ class BidResponseSystem:
         }
         arr = options.get(bid_type, [""])
         return random.choice(arr)
-
 

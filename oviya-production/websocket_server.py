@@ -21,6 +21,17 @@ import os
 try:
     import jwt  # PyJWT
     def verify_jwt(token: str) -> bool:
+        """
+        Validate a JWT token using the OVIYA_SECRET environment variable.
+        
+        If the OVIYA_SECRET environment variable is unset or empty, verification is skipped and the function will accept any token.
+        
+        Parameters:
+            token (str): JWT string to verify.
+        
+        Returns:
+            `true` if the token is valid or verification is skipped, `false` otherwise.
+        """
         secret = os.getenv("OVIYA_SECRET", "")
         if not secret:
             return True
@@ -31,6 +42,15 @@ try:
             return False
 except Exception:
     def verify_jwt(token: str) -> bool:
+        """
+        Validate the provided JWT token against the configured secret or accept it when verification is unavailable.
+        
+        Parameters:
+            token (str): JWT token string to verify.
+        
+        Returns:
+            bool: `True` if the token is considered valid, `False` otherwise.
+        """
         return True
 
 # Simple token-bucket rate limit per IP
@@ -39,11 +59,29 @@ CAP = 20
 REFILL = CAP
 WINDOW = 1.0
 def _client_ip(ws: WebSocket) -> str:
+    """
+    Extract the client's IP address from a WebSocket connection.
+    
+    Parameters:
+        ws (WebSocket): The connected WebSocket instance whose headers and client info are inspected.
+    
+    Returns:
+        client_ip (str): The first IP from the `X-Forwarded-For` header if present; otherwise `ws.client.host` if available; `'unknown'` if no client information is available.
+    """
     xf = ws.headers.get('x-forwarded-for')
     if xf:
         return xf.split(',')[0].strip()
     return ws.client.host if ws.client else 'unknown'
 def allow(ip: str) -> bool:
+    """
+    Determine whether a request from the given client IP is permitted by the per-IP token bucket rate limiter and update the bucket state.
+    
+    Parameters:
+        ip (str): Client IP address used as the rate-limiting key.
+    
+    Returns:
+        bool: `True` if the request is allowed (a token was consumed), `False` otherwise.
+    """
     t = time.time()
     c, ts = BUCKET.get(ip, (CAP, t))
     c = min(CAP, c + (t - ts) * REFILL / WINDOW)
@@ -112,10 +150,42 @@ except Exception:
 @api_v1.post("/conversations")
 async def api_create_conversation(payload: Dict):
     # Minimal stub - generate fake conversation_id
+    """
+    Create a new conversation and return its identifier.
+    
+    Parameters:
+        payload (Dict): Request body for conversation creation; fields are accepted but ignored by this stub implementation.
+    
+    Returns:
+        dict: A mapping with key `conversation_id` containing the new conversation's identifier as a string.
+    """
     return {"conversation_id": f"c_{int(time.time()*1000)}"}
 
 @api_v1.post("/conversations/{conversation_id}/turns")
 async def api_add_turn(conversation_id: str, payload: Dict):
+    """
+    Handle a single non-streaming user turn and produce a structured assistant response.
+    
+    Parameters:
+        conversation_id (str): Identifier for the conversation (used for routing/context; not otherwise modified).
+        payload (Dict): Incoming turn data. Recognized keys:
+            - "user_id" (str): Optional user identifier; defaults to "anonymous".
+            - "text" (str): User utterance to process.
+            - "context" (Dict): Optional contextual metadata (passed through but not required).
+    
+    Returns:
+        Dict: A response object containing:
+            - "assistant": {
+                "text": assistant reply text,
+                "emotion": mapped emotion label (e.g., "neutral"),
+                "intensity": emotion intensity (0.0-1.0),
+                "style_hint": optional style hint string,
+                "situation": guidance category from the brain if available,
+                "timing_plan": playback timing hints (e.g., {"pre_tts_delay_ms": 400})
+              }
+            - "safety": safety flags (e.g., {"flag": False})
+            - "global_soul": placeholder for global personality/state
+    """
     user_id = payload.get("user_id", "anonymous")
     text = payload.get("text", "")
     ctx = payload.get("context", {})
@@ -150,12 +220,21 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def startup_event():
-    """Pre-initialize models on startup"""
+    """
+    Preload global models and start optional session cleanup task.
+    
+    Pre-initializes shared model instances used by the server. If session cleanup support is available, schedules a background task that calls `cleanup_sessions()` approximately every 60 seconds.
+    """
     print("🚀 Pre-initializing models...")
     get_global_models()
     print("✅ Server ready for connections")
     if _HAS_SESSION_CLEANUP:
         async def _cleanup_loop():
+            """
+            Periodically invokes the session cleanup routine in a background loop.
+            
+            Calls cleanup_sessions() once every 60 seconds and suppresses any exceptions raised by that call. Runs indefinitely until the surrounding task is cancelled.
+            """
             while True:
                 try:
                     cleanup_sessions()
@@ -193,6 +272,15 @@ class StreamingSTT:
     Processes rolling audio buffer and emits partial transcripts.
     """
     def __init__(self, model_size: str = "small.en"):
+        """
+        Initialize the streaming speech-to-text processor with a Whisper model.
+        
+        Parameters:
+            model_size (str): Whisper model identifier (e.g., "small.en") used to load the transcription model.
+        
+        Description:
+            Loads a WhisperModel for streaming transcription, selects a GPU device when available (falls back otherwise), and configures compute precision accordingly. Initializes audio sampling rate (16000 Hz), an internal byte buffer for incoming PCM data, timing controls for partial-transcript emissions (emit interval and last emission timestamp), last emitted partial transcript tracker, and minimum/maximum window durations (in seconds) used when extracting audio slices for partial transcription.
+        """
         device = "cuda" if torch.cuda.is_available() else "auto"
         compute_type = "int8_float16" if device == "cuda" else "int8"
         self.model = WhisperModel(model_size, device=device, compute_type=compute_type)
@@ -205,13 +293,36 @@ class StreamingSTT:
         self.max_window_s = 3.0
 
     def add_audio(self, audio_bytes: bytes):
+        """
+        Append raw audio bytes to the instance's internal buffer.
+        
+        Parameters:
+            audio_bytes (bytes): Raw PCM audio bytes to append to the buffer.
+        """
         self.buffer.extend(audio_bytes)
 
     def should_commit(self, vad_confidence: float) -> bool:
         # Commit on strong VAD confidence to avoid mid-phoneme cuts
+        """
+        Decides whether accumulated audio should be committed as speech based on VAD confidence and buffer length.
+        
+        Parameters:
+            vad_confidence (float): Voice activity detection confidence in the range [0.0, 1.0].
+        
+        Returns:
+            `true` if `vad_confidence` is at least 0.7 and the internal audio buffer contains at least sample_rate * min_window_s * 2 samples, `false` otherwise.
+        """
         return vad_confidence >= 0.7 and len(self.buffer) >= int(self.sample_rate * self.min_window_s) * 2
 
     def get_partial(self) -> str:
+        """
+        Return an updated partial transcription derived from the most recent buffered audio, or an empty string when no new partial is available.
+        
+        Enforces an emission cadence (does nothing if called sooner than the configured emit interval), requires at least the configured minimum audio window, and transcribes using up to the configured maximum window from the buffer. If the transcribed text is non-empty and different from the last emitted partial, the new partial is returned and stored; otherwise an empty string is returned. Errors during transcription are swallowed and result in an empty string.
+        
+        Returns:
+            str: The new partial transcript if it changed since the last emission, otherwise an empty string.
+        """
         now = time.time()
         if now - self.last_emit_time < self.emit_interval:
             return ""
@@ -251,6 +362,14 @@ class ConversationSession:
     """Manages a single conversation session"""
     
     def __init__(self, user_id: str):
+        """
+        Initialize a conversation session for the given user, preparing shared models, per-session components, and streaming state.
+        
+        Creates or attaches shared/global models, instantiates per-session systems (LLM brain, emotion controller, TTS and STT clients, psych systems), loads the user's personality (if present) into the session context, and initializes fields used for streaming audio, VAD, memory, and optional components such as a breath sample and Silero VAD.
+        
+        Parameters:
+            user_id (str): Unique identifier of the user for whom the session is created.
+        """
         self.user_id = user_id
         
         # Use global shared models (much faster)
@@ -299,13 +418,13 @@ class ConversationSession:
     
     async def process_audio_chunk(self, audio_data: bytes) -> Optional[Dict]:
         """
-        Process incoming audio chunk
+        Process a PCM16LE audio chunk by feeding it to both the legacy voice-input buffer and the streaming STT, and return any available transcription.
         
-        Args:
-            audio_data: Raw audio bytes (PCM, 16-bit, 16kHz, mono)
-            
+        Parameters:
+            audio_data (bytes): Raw PCM16LE audio bytes, 16-bit little-endian, 16 kHz, mono.
+        
         Returns:
-            Transcription result if available
+            Optional[dict]: Transcription result dictionary if a transcription is available, `None` otherwise.
         """
         # Convert bytes to numpy array
         audio_array = np.frombuffer(audio_data, dtype=np.int16).astype(np.float32) / 32768.0
@@ -321,6 +440,14 @@ class ConversationSession:
         return result
 
     def _load_breath_sample(self) -> Optional[np.ndarray]:
+        """
+        Load a bundled breath audio sample for use in TTS.
+        
+        Attempts to load "audio_assets/breath_samples/gentle_exhale.wav", convert it to mono, resample to 24000 Hz if necessary, and scale its amplitude for subtle mixing. 
+        
+        Returns:
+            numpy.ndarray: 1-D float32 PCM samples at 24000 Hz (shape: (n,)) scaled to low amplitude, or `None` if the file is missing or cannot be loaded.
+        """
         try:
             import torchaudio
             p = Path(__file__).resolve().parent.parent / 'audio_assets' / 'breath_samples' / 'gentle_exhale.wav'
@@ -338,17 +465,14 @@ class ConversationSession:
     
     async def generate_response(self, user_text: str, user_emotion: str) -> Dict:
         """
-        Generate Oviya's response
+        Create an assistant response text and corresponding TTS audio chunks for a user turn.
         
-        Args:
-            user_text: Transcribed user text
-            user_emotion: Detected user emotion
-            
         Returns:
-            {
-                'text': str,
-                'emotion': str,
-                'audio_chunks': List[bytes]  # Base64 encoded
+            dict: {
+                'text' (str): The assistant's response text.
+                'emotion' (str): The mapped CSM emotion/style token used for TTS.
+                'audio_chunks' (List[str]): Base64-encoded PCM audio chunks ready for streaming.
+                'duration' (float): Estimated audio duration in seconds (based on 24 kHz sample rate).
             }
         """
         print(f"🧠 Generating response for: '{user_text}' (emotion: {user_emotion})")
@@ -404,8 +528,9 @@ class ConversationSession:
 
     async def generate_response_streaming(self, websocket: WebSocket, user_text: str, user_emotion: str):
         """
-        Stream TTS audio chunks as they are generated.
-        Sends 'audio_chunk' messages and a terminal 'response' with text/emotion.
+        Stream synthesized TTS audio to the websocket while generating prosodic text from the brain.
+        
+        Cancels any active TTS stream, attempts to begin TTS as soon as a prosodic boundary is available from streaming LLM tokens (falls back to a full brain response if needed), and streams generated audio as JSON messages. Sends 'audio_chunk' messages containing base64 PCM_s16le frames (24 kHz), emits a 'first_audio_chunk' marker when the first audio is sent, and finally sends a 'response' message with the final text and emotion. Persists a memory triple for the turn and respects cancellation requests.
         """
         await self.cancel_tts_stream()
 
@@ -442,6 +567,11 @@ class ConversationSession:
         self._tts_cancel_requested = False
 
         async def _stream():
+            """
+            Stream TTS audio from the CSM client to the websocket as base64-encoded PCM chunks.
+            
+            Continuously consumes audio frames produced by self.csm_streaming.generate_streaming, applies a short EMA smoothing, accumulates samples into ~80ms batches, and sends each batch to the websocket as a JSON message with type 'audio_chunk' (format 'pcm_s16le', sample_rate 24000). If a breath sample is configured and requested in the prosodic text, inserts the breath once at the start of the first sent audio. Sends a single 'first_audio_chunk' message the first time audio is delivered and records the time-to-first-audio metric when available. Stops early if self._tts_cancel_requested is set. On unexpected errors, sends an error JSON message describing the failure.
+            """
             try:
                 max_samples = 1920  # ~80ms at 24kHz
                 buf, n = [], 0
@@ -515,6 +645,16 @@ class ConversationSession:
             self._memory_triples = self._memory_triples[-50:]
 
     def _format_context_for_tts(self) -> List[Dict]:
+        """
+        Build a short conversational context for TTS from the most recent memory triples.
+        
+        Returns:
+            context (List[Dict]): Sequence of dictionaries each containing:
+                - 'text' (str): utterance text.
+                - 'speaker_id' (int): 1 for the user utterance (question), 0 for the assistant response.
+            The list contains up to the last three memory triples, with each triple expanded into two entries
+            in the order: user utterance then assistant response.
+        """
         ctx = []
         for t in self._memory_triples[-3:]:
             ctx.append({'text': t['q'], 'speaker_id': 1})
@@ -522,6 +662,16 @@ class ConversationSession:
         return ctx
     
     def _ema_smooth(self, x: np.ndarray, alpha: float = 0.1) -> np.ndarray:
+        """
+        Apply exponential moving average smoothing along a 1-D numeric array.
+        
+        Parameters:
+            x (np.ndarray): 1-D array of numeric samples to smooth.
+            alpha (float): Smoothing factor in (0,1]; higher values weight recent samples more. Defaults to 0.1.
+        
+        Returns:
+            np.ndarray: Smoothed array of the same shape as `x`. If smoothing cannot be performed, returns the original input `x`.
+        """
         try:
             y = np.copy(x)
             for i in range(1, len(y)):
@@ -532,14 +682,14 @@ class ConversationSession:
     
     def _chunk_audio(self, audio: torch.Tensor, chunk_size: int = 4096) -> list:
         """
-        Split audio into chunks for streaming
+        Split a tensor of audio samples into base64-encoded PCM16 chunks suitable for JSON transmission.
         
-        Args:
-            audio: Audio tensor (1D or 2D)
-            chunk_size: Samples per chunk
-            
+        Parameters:
+            audio (torch.Tensor): 1D or 2D float32 tensor of audio samples in the range [-1.0, 1.0].
+            chunk_size (int): Number of samples per chunk.
+        
         Returns:
-            List of base64-encoded audio chunks
+            list: List of base64-encoded strings, each containing a PCM16 (signed 16-bit little-endian) audio chunk.
         """
         # Ensure audio is 1D
         if len(audio.shape) > 1:
@@ -560,7 +710,14 @@ class ConversationSession:
 
 @app.get("/")
 async def get():
-    """Serve a simple test page"""
+    """
+    Return a simple HTML test page containing a client-side UI and JavaScript for connecting to the WebSocket voice chat.
+    
+    The page includes controls to connect, record audio (downsampling from 24k to 16k for transport), display transcripts and responses, and play streaming TTS audio via an in-page jitter-managed playback pipeline.
+    
+    Returns:
+        HTMLResponse: Response containing the test page HTML.
+    """
     html = """
     <!DOCTYPE html>
     <html>
@@ -756,6 +913,11 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str = "anonymous"):
     try:
         # Heartbeat task to keep tunnel/NAT alive
         async def heartbeat():
+            """
+            Periodically sends ping messages over the websocket to keep the connection alive.
+            
+            Sends a JSON message {"type": "ping", "t": <unix timestamp>} every 5 seconds and stops when sending fails (e.g., connection closed).
+            """
             while True:
                 try:
                     await websocket.send_json({"type": "ping", "t": time.time()})
@@ -977,7 +1139,15 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str = "anonymous"):
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint"""
+    """
+    Return a simple service health summary.
+    
+    Returns:
+        dict: A dictionary with keys:
+            - "status": service health status string, e.g., "healthy".
+            - "service": human-readable service name.
+            - "version": service version string.
+    """
     return {
         "status": "healthy",
         "service": "Oviya WebSocket Server",
@@ -987,6 +1157,12 @@ async def health_check():
 
 @app.get('/worklet_ws.js')
 async def worklet_ws():
+    """
+    Serve a small Web Audio Worklet module that captures audio, downsamples it, and forwards 16 kHz PCM16 buffers to the main thread.
+    
+    Returns:
+    	A FastAPI `Response` containing the JavaScript worklet source with media type "application/javascript".
+    """
     js = """
 class WSRecorder extends AudioWorkletProcessor {
   constructor() { super(); this.decim = 24000/16000; }
@@ -1008,6 +1184,14 @@ registerProcessor('ws-recorder', WSRecorder);
 
 @app.get('/metrics')
 async def metrics():
+    """
+    Expose Prometheus metrics as an HTTP response.
+    
+    Attempts to return the current Prometheus metrics in the Prometheus text exposition format; if metrics generation fails, returns an empty plain-text response.
+    
+    Returns:
+        Response: HTTP response with Prometheus metrics (Content-Type: prometheus) or an empty plain-text response on error.
+    """
     try:
         return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
     except Exception:
@@ -1025,4 +1209,3 @@ if __name__ == "__main__":
     print("=" * 60)
     
     uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")
-

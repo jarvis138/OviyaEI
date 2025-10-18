@@ -5,6 +5,14 @@ import torchaudio
 
 
 def main():
+    """
+    Tokenize all WAV files under an input directory into Mimi tokens and write them to an output directory.
+    
+    Parses CLI arguments --input (required, path to normalized WAV root), --out (required, output tokens root), and --batch-size (optional). For each .wav file under --input, loads audio, resamples to 24000 Hz if needed, mixes channels to mono, encodes the waveform with a pretrained Mimi model ("kyutai/mimi"), and saves the resulting tokens as a .pt file in the output directory using the input file stem.
+    
+    Raises:
+        RuntimeError: if the Mimi library cannot be imported or if a produced token object is not a dict containing the 'acoustic' key.
+    """
     ap = argparse.ArgumentParser()
     ap.add_argument("--input", required=True, help="normalized wav root (24k mono)")
     ap.add_argument("--out", required=True, help="output tokens root")
@@ -38,5 +46,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-
 

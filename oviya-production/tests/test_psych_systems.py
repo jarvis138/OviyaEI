@@ -20,6 +20,12 @@ from brain.llm_brain import OviyaBrain
 
 
 def load_persona():
+    """
+    Load and return the Oviya persona configuration from the repository's config/oviya_persona.json.
+    
+    Returns:
+        dict: Persona configuration parsed from the JSON file.
+    """
     cfg_path = os.path.join(PROD_DIR, 'config', 'oviya_persona.json')
     with open(cfg_path, 'r') as f:
         return json.load(f)
@@ -80,5 +86,4 @@ def test_build_prompt_includes_situation_and_hint():
     prompt = brain._build_prompt("I got promoted!", None, None)
     assert 'situation' in prompt
     assert 'recommended_emotion_hint' in prompt
-
 

@@ -115,13 +115,27 @@ class CSM1BClient:
         use_hf_pipeline: Optional[bool] = None
     ):
         """
-        Initialize CSM-1B client
+        Create and configure a CSM-1B client instance and prepare model or remote client.
         
-        Args:
-            model_id: Hugging Face model ID
-            device: Device for inference
-            use_local_model: Load model locally vs use remote API (default: True)
-            remote_url: Remote CSM service URL (if not using local)
+        Initializes runtime settings (device, model_id, sample rate), determines whether to use
+        the Hugging Face pipeline, attempts to create CUDA streams for overlapped generation
+        and decoding if CUDA is available, and then either loads the local model or configures
+        the remote service client as requested.
+        
+        Parameters:
+            model_id: Identifier of the CSM-1B model to use (Hugging Face style).
+            device: Compute device for inference (e.g., "cuda" or "cpu").
+            use_local_model: If True, load and use a local model; otherwise prepare remote API usage.
+            remote_url: Base URL of the remote CSM service to use when not loading a local model.
+            use_hf_pipeline: If set, overrides environment-driven decision to enable the Hugging Face
+                CSM pipeline when available.
+        
+        Notes:
+            - The client sets sample_rate to 24000 Hz.
+            - If CUDA is available, the constructor will attempt to create two CUDA streams for
+              overlapping generation and decoding; on failure it silently falls back to no streams.
+            - At the end of initialization the client will either load the local model or perform
+              remote client setup depending on `use_local_model`.
         """
         self.device = device
         self.model_id = model_id
@@ -222,17 +236,21 @@ class CSM1BClient:
         style_vec: Optional[List[float]] = None
     ) -> AsyncGenerator[np.ndarray, None]:
         """
-        Generate audio with streaming for low latency
+        Stream-synthesize audio for the given text, yielding decoded PCM chunks as they become available.
         
-        Args:
-            text: Text to synthesize
-            emotion: Emotion label (calm, joyful, sad, etc.)
-            speaker_id: Speaker ID (0-N)
-            conversation_context: Recent conversation turns
-            reference_audio: Optional reference audio for voice/style conditioning
-            
-        Yields:
-            PCM audio chunks (float32, 24kHz)
+        Streams audio generated for `text` using the client configuration (local HF pipeline, local model, or remote service), optionally conditioned on emotion, speaker identity, recent conversation turns, a reference audio sample, and an optional style vector.
+        
+        Parameters:
+            text (str): Text to synthesize.
+            emotion (str): Emotion label (e.g., "calm", "joyful", "sad"); influences prosody tokens.
+            speaker_id (int): Speaker identifier used in the prompt/context.
+            conversation_context (Optional[List[Dict]]): Recent conversation turns to include in context; each turn is a dict with speaker and text.
+            reference_audio (Optional[np.ndarray]): Reference PCM audio (float32, [-1, 1]) used for voice/style conditioning.
+            use_hf_pipeline (Optional[bool]): Per-call override to prefer the HuggingFace pipeline when available.
+            style_vec (Optional[List[float]]): Optional style embedding for FiLM-style conditioning.
+        
+        Returns:
+            AsyncGenerator[np.ndarray, None]: Yields PCM audio chunks as 1D float32 NumPy arrays at 24 kHz.
         """
         if self.use_local_model:
             # Per-request override if provided
@@ -265,13 +283,18 @@ class CSM1BClient:
         style_vec: Optional[List[float]]
     ) -> AsyncGenerator[np.ndarray, None]:
         """
-        Local streaming generation with RVQ → Mimi pipeline
+        Stream progressively decoded PCM audio for the given text using the local CSM-1B RVQ → Mimi pipeline.
         
-        This is the proper CSM-1B implementation:
-        1. Format prompt with context + prosody tokens
-        2. Generate RVQ tokens autoregressively
-        3. Decode RVQ → PCM via Mimi in chunks
-        4. Stream audio progressively
+        Parameters:
+            text (str): The utterance to synthesize.
+            emotion (str): Emotion/prosody token to condition generation.
+            speaker_id (int): Speaker identifier used in the prompt.
+            conversation_context (Optional[List[Dict]]): Recent turns to include in the prompt; each turn is a dict with speaker/text.
+            reference_audio (Optional[np.ndarray]): Optional reference voice as a 1-D or 2-D float32 PCM array (assumed ~24 kHz); used to condition timbre if provided.
+            style_vec (Optional[List[float]]): Optional style embedding used for FiLM-style conditioning; implementationally converted to tensors when provided.
+        
+        Returns:
+            np.ndarray: Yields successive decoded PCM chunks as 1-D float32 NumPy arrays sampled at 24000 Hz; each yielded array is a contiguous segment of generated audio.
         """
         # Format prompt with Oviya's prosody/emotion
         prompt = self._format_prompt(
@@ -376,7 +399,18 @@ class CSM1BClient:
         style_vec: Optional[List[float]]
     ) -> AsyncGenerator[np.ndarray, None]:
         """
-        Streaming generation via HuggingFace CSM pipeline.
+        Stream audio generated by the HuggingFace CSM pipeline for the given prompt parameters.
+        
+        Parameters:
+            text (str): Prompt text to synthesize.
+            emotion (str): Emotion hint to provide to the pipeline.
+            speaker_id (int): Speaker identifier for the current turn.
+            conversation_context (Optional[List[Dict]]): Optional conversation history; at most the last three turns are forwarded.
+            reference_audio (Optional[np.ndarray | bytes]): Optional reference voice as a NumPy float32 PCM array ([-1, 1]) or raw bytes; sent to the pipeline if provided.
+            style_vec (Optional[List[float]]): Optional personality/style vector forwarded to the backend if supported.
+        
+        Returns:
+            AsyncGenerator[np.ndarray, None]: Yields successive chunks of float32 PCM audio sampled at 24000 Hz (chunks are ~200 ms each).
         """
         if reference_audio is None:
             reference_audio = self.reference_audio
@@ -735,4 +769,3 @@ async def test_csm_1b():
 if __name__ == "__main__":
     import asyncio
     asyncio.run(test_csm_1b())
-
