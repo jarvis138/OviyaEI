@@ -7,7 +7,7 @@ class EmotionDimensions(BaseModel):
     arousal: float = Field(ge=0.0, le=1.0)
     dominance: float = Field(ge=0.0, le=1.0)
 
-    @root_validator
+    @root_validator(skip_on_failure=True)
     def check_consistency(cls, values):
         # Placeholder for cross-checks with emotion_label
         return values
@@ -20,7 +20,7 @@ class ToneFeatures(BaseModel):
 
 
 class OviyaSample(BaseModel):
-    utterance_id: str = Field(regex=r'^[a-f0-9\-]{8,36}$')
+    utterance_id: str = Field(pattern=r'^[a-f0-9\-]{8,36}$')
     text: str = Field(min_length=1, max_length=2048)
     audio_path: Optional[str]
 
@@ -30,7 +30,7 @@ class OviyaSample(BaseModel):
     emotion_aliases: List[str] = Field(default_factory=list)
     emotion_dim: EmotionDimensions
 
-    culture: str = Field(regex=r'^[a-z]{2}_[a-z]{2}$')
+    culture: str = Field(pattern=r'^[a-z]{2}_[a-z]{2}$')
     context: Optional[str]
     speaker_role: Literal['expresser', 'listener', 'observer']
 
@@ -59,7 +59,7 @@ class OviyaSample(BaseModel):
             raise ValueError("All caps text detected")
         return v.strip()
 
-    @root_validator
+    @root_validator(skip_on_failure=True)
     def check_response_completeness(cls, values):
         if values.get('response') and not values.get('empathy_type'):
             raise ValueError("Response must have empathy_type")
