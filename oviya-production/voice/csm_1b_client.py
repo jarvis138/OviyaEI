@@ -133,6 +133,16 @@ class CSM1BClient:
         # Decide HF pipeline usage
         env_hf = os.getenv("OVIYA_USE_HF_CSM")
         self.use_hf_pipeline = (use_hf_pipeline if use_hf_pipeline is not None else (env_hf == "1")) and HF_AVAILABLE
+        # CUDA streams for overlap (generation vs decode)
+        self.cuda_stream_gen = None
+        self.cuda_stream_decode = None
+        if torch.cuda.is_available():
+            try:
+                self.cuda_stream_gen = torch.cuda.Stream()
+                self.cuda_stream_decode = torch.cuda.Stream()
+            except Exception:
+                self.cuda_stream_gen = None
+                self.cuda_stream_decode = None
         
         print(f"🎤 Initializing CSM-1B Client...")
         print(f"   Device: {device}")
@@ -208,7 +218,8 @@ class CSM1BClient:
         speaker_id: int = 0,
         conversation_context: Optional[List[Dict]] = None,
         reference_audio: Optional[np.ndarray] = None,
-        use_hf_pipeline: Optional[bool] = None
+        use_hf_pipeline: Optional[bool] = None,
+        style_vec: Optional[List[float]] = None
     ) -> AsyncGenerator[np.ndarray, None]:
         """
         Generate audio with streaming for low latency
@@ -230,12 +241,12 @@ class CSM1BClient:
                 use_hf = use_hf_pipeline and HF_AVAILABLE
             if use_hf:
                 async for chunk in self._generate_hf_pipeline_streaming(
-                    text, emotion, speaker_id, conversation_context, reference_audio
+                    text, emotion, speaker_id, conversation_context, reference_audio, style_vec
                 ):
                     yield chunk
             else:
                 async for chunk in self._generate_local_streaming(
-                    text, emotion, speaker_id, conversation_context, reference_audio
+                    text, emotion, speaker_id, conversation_context, reference_audio, style_vec
                 ):
                     yield chunk
         else:
@@ -250,7 +261,8 @@ class CSM1BClient:
         emotion: str,
         speaker_id: int,
         conversation_context: Optional[List[Dict]],
-        reference_audio: Optional[np.ndarray]
+        reference_audio: Optional[np.ndarray],
+        style_vec: Optional[List[float]]
     ) -> AsyncGenerator[np.ndarray, None]:
         """
         Local streaming generation with RVQ → Mimi pipeline
@@ -295,6 +307,17 @@ class CSM1BClient:
             except Exception as _e:
                 pass
         
+        # Apply style conditioning (FiLM) if style vector provided
+        film_params: Optional[Dict[str, torch.Tensor]] = None
+        if style_vec is not None:
+            try:
+                import torch
+                from .csm_style_adapter import style_film_params
+                s = torch.tensor(style_vec, dtype=torch.float32, device=self.device)
+                film_params = style_film_params(s, scale=0.5)
+            except Exception:
+                film_params = None
+
         # Generate RVQ tokens with streaming
         rvq_buffer = []
         flush_threshold = 50  # Decode every 50 tokens (~1 second)
@@ -303,22 +326,43 @@ class CSM1BClient:
             # Autoregressive generation
             for rvq_token in self._generate_rvq_tokens_incremental(inputs):
                 rvq_buffer.append(rvq_token)
-                
+
                 # Decode and stream when buffer is large enough
                 if len(rvq_buffer) >= flush_threshold:
                     rvq_tensor = torch.tensor(rvq_buffer, device=self.device)
-                    pcm_chunk = self.mimi_decoder.decode(rvq_tensor)
-                    
+
+                    # Overlap: schedule decode on a separate CUDA stream if available
+                    pcm_chunk = None
+                    if self.cuda_stream_decode is not None:
+                        try:
+                            with torch.cuda.stream(self.cuda_stream_decode):
+                                # Optionally, pass FiLM params to Mimi/decoder pipeline when supported
+                                pcm_chunk = self.mimi_decoder.decode(rvq_tensor)
+                            # Ensure decode finished before CPU normalization
+                            torch.cuda.current_stream().wait_stream(self.cuda_stream_decode)
+                        except Exception:
+                            pcm_chunk = self.mimi_decoder.decode(rvq_tensor)
+                    else:
+                        pcm_chunk = self.mimi_decoder.decode(rvq_tensor)
+
                     # Apply volume normalization
                     pcm_chunk = self._normalize_volume(pcm_chunk, gain=3.5)
-                    
+
                     yield pcm_chunk
                     rvq_buffer = []
         
         # Final flush
         if rvq_buffer:
             rvq_tensor = torch.tensor(rvq_buffer, device=self.device)
-            pcm_chunk = self.mimi_decoder.decode(rvq_tensor)
+            if self.cuda_stream_decode is not None:
+                try:
+                    with torch.cuda.stream(self.cuda_stream_decode):
+                        pcm_chunk = self.mimi_decoder.decode(rvq_tensor)
+                    torch.cuda.current_stream().wait_stream(self.cuda_stream_decode)
+                except Exception:
+                    pcm_chunk = self.mimi_decoder.decode(rvq_tensor)
+            else:
+                pcm_chunk = self.mimi_decoder.decode(rvq_tensor)
             pcm_chunk = self._normalize_volume(pcm_chunk, gain=3.5)
             yield pcm_chunk
 
@@ -328,7 +372,8 @@ class CSM1BClient:
         emotion: str,
         speaker_id: int,
         conversation_context: Optional[List[Dict]],
-        reference_audio: Optional[np.ndarray]
+        reference_audio: Optional[np.ndarray],
+        style_vec: Optional[List[float]]
     ) -> AsyncGenerator[np.ndarray, None]:
         """
         Streaming generation via HuggingFace CSM pipeline.
@@ -353,6 +398,9 @@ class CSM1BClient:
                     pass
             # Emotion hint if supported
             forward_params["emotion"] = emotion
+            # Personality style vector if supported by backend
+            if style_vec is not None:
+                forward_params["style_vector"] = style_vec
 
             out = self.pipe(text, forward_params=forward_params)
             # Expect out["audio"] and out["sampling_rate"]
