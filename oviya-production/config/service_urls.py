@@ -4,11 +4,13 @@ Cloudflare Tunnel URLs for Oviya Services
 RTX 5880 Ada Instance
 """
 
-# Cloudflare Tunnel URLs (RTX 5880 Ada - VastAI)
-OLLAMA_URL = "https://prime-show-visit-lock.trycloudflare.com/api/generate"
-CSM_URL = "https://josh-strong-iron-conventional.trycloudflare.com/generate"  # ✅ REAL CSM-1B + Mimi decoder
-CSM_STREAM_URL = "https://josh-strong-iron-conventional.trycloudflare.com/generate/stream"  # ✅ Streaming endpoint
-WHISPERX_URL = "https://msgid-enquiries-williams-lands.trycloudflare.com"
+# Cloudflare Tunnel URLs (RTX 5880 Ada - VastAI) - overridable via env
+import os
+
+OLLAMA_URL = os.getenv("OLLAMA_URL", "https://prime-show-visit-lock.trycloudflare.com/api/generate")
+CSM_URL = os.getenv("CSM_URL", "https://josh-strong-iron-conventional.trycloudflare.com/generate")  # ✅ REAL CSM-1B + Mimi decoder
+CSM_STREAM_URL = os.getenv("CSM_STREAM_URL", "https://josh-strong-iron-conventional.trycloudflare.com/generate/stream")  # ✅ Streaming endpoint
+WHISPERX_URL = os.getenv("WHISPERX_URL", "https://msgid-enquiries-williams-lands.trycloudflare.com")
 
 # WhisperX API endpoints
 WHISPERX_HEALTH = f"{WHISPERX_URL}/health"

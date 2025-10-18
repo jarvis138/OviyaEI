@@ -1,0 +1,12 @@
+raw/
+normalized/
+normalized_commercial/
+**/*.parquet
+**/*.zip
+**/*.tar
+**/*.tar.gz
+**/*.7z
+__pycache__/
+*.pyc
+.git/
+.dvc/

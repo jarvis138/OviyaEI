@@ -1,0 +1,22 @@
+name: Validate Oviya Data
+
+on: [push, pull_request]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          pip install pydantic pandas pyarrow
+      - name: Schema validation
+        run: |
+          python data/schema_validator.py "data/oviya_corpus/**/*.parquet"
+      - name: Taxonomy integrity
+        run: |
+          python -c "from data.taxonomy_manager import TaxonomyManager; TaxonomyManager()"
+

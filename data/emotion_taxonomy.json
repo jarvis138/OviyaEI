@@ -1,0 +1,47 @@
+{
+  "version": "1.0",
+  "created": "2025-10-18",
+  "frozen": true,
+  "primary_emotions": [
+    "joy", "anger", "sadness", "fear", "surprise", "disgust", "neutral", "trust", "anticipation"
+  ],
+  "mappings": {
+    "GoEmotions": {
+      "admiration": "trust",
+      "amusement": "joy",
+      "anger": "anger",
+      "annoyance": "anger",
+      "approval": "trust",
+      "caring": "trust",
+      "confusion": "surprise",
+      "curiosity": "anticipation",
+      "desire": "anticipation",
+      "disappointment": "sadness",
+      "disapproval": "anger",
+      "disgust": "disgust",
+      "embarrassment": "fear",
+      "excitement": "joy",
+      "fear": "fear",
+      "gratitude": "joy",
+      "grief": "sadness",
+      "joy": "joy",
+      "love": "joy",
+      "nervousness": "fear",
+      "optimism": "anticipation",
+      "pride": "joy",
+      "realization": "surprise",
+      "relief": "joy",
+      "remorse": "sadness",
+      "sadness": "sadness",
+      "surprise": "surprise",
+      "neutral": "neutral"
+    }
+  },
+  "dimensional_ranges": {
+    "valence": [-1.0, 1.0],
+    "arousal": [0.0, 1.0],
+    "dominance": [0.0, 1.0]
+  },
+  "checksum": "sha256:PLACEHOLDER"
+}
+
