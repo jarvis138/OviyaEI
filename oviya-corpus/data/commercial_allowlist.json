@@ -1,0 +1,10 @@
+{
+  "allowed": [
+    "ravdess_normalized.parquet",
+    "cremad_normalized.parquet",
+    "goemotions_normalized.parquet",
+    "opensubtitles_normalized.parquet",
+    "synthetic_normalized.parquet",
+    "prolific_human_rated_normalized.parquet"
+  ]
+}

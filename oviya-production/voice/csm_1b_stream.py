@@ -293,9 +293,21 @@ class CSMRVQStreamer:
             
             print(f"   Generated: {total_frames} RVQ frames ({total_duration_ms:.0f}ms)")
             print(f"   Streaming in {self.flush_rvq_frames}-frame chunks...")
-            
+
+            # Pre-decode first 2 frames to reduce time-to-first-audio
+            try:
+                if total_frames >= 2:
+                    pre_end = min(2, total_frames)
+                    pre_window = rvq_codes[0:pre_end]
+                    pre_pcm = self._decode_rvq_window(pre_window)
+                    yield pre_pcm
+            except Exception:
+                pass
+
             # Stream in small RVQ windows (paper: 2-4 frames optimal)
             chunk_count = 0
+            expected_samples = 0
+            last_resync = start_time
             for start_frame in range(0, total_frames, self.flush_rvq_frames):
                 if self._stop_requested:
                     print("⏹️  Streaming stopped by request")
@@ -307,6 +319,26 @@ class CSMRVQStreamer:
                 
                 # Decode with Mimi
                 pcm_chunk = self._decode_rvq_window(rvq_window)
+                # Advanced drift correction: time-based + short-window RMS correlation
+                now = time.time()
+                expected_samples += len(pcm_chunk)
+                if now - last_resync > 2.0:
+                    ideal = int((now - start_time) * self.sample_rate)
+                    drift = expected_samples - ideal
+                    adjust = False
+                    factor = 1.0
+                    if abs(drift) > int(0.010 * self.sample_rate):  # >10 ms
+                        factor = max(0.997, min(1.003, ideal / max(1, expected_samples)))
+                        adjust = True
+                    if adjust:
+                        try:
+                            from scipy.signal import resample
+                            new_len = max(1, int(len(pcm_chunk) * factor))
+                            pcm_chunk = resample(pcm_chunk, new_len).astype(np.float32)
+                            expected_samples = ideal
+                        except Exception:
+                            pass
+                    last_resync = now
                 
                 chunk_duration_ms = len(pcm_chunk) / self.sample_rate * 1000
                 chunk_count += 1

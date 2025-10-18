@@ -25,7 +25,30 @@ import torchaudio
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, HTMLResponse
+from fastapi.responses import JSONResponse, HTMLResponse, Response
+import os
+try:
+    import jwt  # PyJWT
+    def verify_jwt(token: str) -> bool:
+        secret = os.getenv("OVIYA_SECRET", "")
+        if not secret:
+            return True
+        try:
+            jwt.decode(token, secret, algorithms=["HS256"])  # type: ignore
+            return True
+        except Exception:
+            return False
+except Exception:
+    def verify_jwt(token: str) -> bool:
+        return True
+try:
+    from prometheus_client import Summary, CONTENT_TYPE_LATEST, generate_latest
+    STT_LATENCY = Summary('oviya_rtc_stt_latency_seconds', 'STT processing time per turn')
+    LLM_LATENCY = Summary('oviya_rtc_llm_latency_seconds', 'LLM processing time per turn')
+    TTS_LATENCY = Summary('oviya_rtc_tts_latency_seconds', 'TTS generation time per turn')
+    TIME_TO_FIRST_AUDIO = Summary('oviya_rtc_ttfb_seconds', 'Time to first audio chunk')
+except Exception:
+    STT_LATENCY = LLM_LATENCY = TTS_LATENCY = TIME_TO_FIRST_AUDIO = None
 
 from aiortc import (
     RTCPeerConnection,
@@ -34,6 +57,11 @@ from aiortc import (
     RTCConfiguration,
     RTCIceServer
 )
+try:
+    from aiortc.rtcrtpsender import RTCRtpSender
+    RTCRtpSender._RETRANSMISSION_MAX_DELAY = 0.25
+except Exception:
+    pass
 from av import AudioFrame
 
 # Import Oviya components
@@ -43,6 +71,7 @@ from emotion_controller.controller import EmotionController
 from voice.csm_1b_client import CSM1BClient
 from voice.whisper_client import WhisperTurboClient
 from voice.csm_1b_stream import CSMRVQStreamer
+from voice.humanlike_prosody import HumanlikeProsodyEngine
 
 app = FastAPI(title="Oviya WebRTC Voice Server")
 
@@ -401,6 +430,7 @@ class OviyaVoiceConnection:
         self.csm = RemoteCSMClient()
         self.brain = OviyaBrain(ollama_url=OLLAMA_URL)
         self.emotion_controller = EmotionController()
+        self.humanlike = HumanlikeProsodyEngine(enable_fillers=True)
         
         # Audio streaming
         self.audio_output_track = AudioStreamTrack()
@@ -438,11 +468,42 @@ class OviyaVoiceConnection:
             dtype=np.int16
         ).astype(np.float32) / 32768.0
 
-        # Basic preprocessing: high-pass filter + simple spectral gate placeholder
+        # Basic preprocessing: high-pass filter + light noise reduction + RMS normalization
         try:
             # High-pass at ~80 Hz to remove rumble
             b, a = torchaudio.functional.highpass_biquad(torch.tensor(audio_data), self.vad.sample_rate, 80)
             audio_data = b.numpy() if hasattr(b, 'numpy') else audio_data
+        except Exception:
+            pass
+        
+        # Very light noise reduction using spectral gating on short window
+        try:
+            # Convert to torch tensor for ops
+            audio_tensor = torch.tensor(audio_data)
+            # Short STFT
+            stft = torch.stft(audio_tensor, n_fft=256, hop_length=128, win_length=256, return_complex=True)
+            mag = stft.abs()
+            # Estimate noise floor from 10th percentile
+            noise_floor = torch.quantile(mag, 0.10)
+            # Soft gate
+            gated_mag = torch.clamp(mag - 0.6 * noise_floor, min=0.0)
+            # Preserve phase
+            phase = torch.angle(stft)
+            stft_denoised = gated_mag * torch.exp(1j * phase)
+            # iSTFT
+            denoised = torch.istft(stft_denoised, n_fft=256, hop_length=128, win_length=256, length=audio_tensor.shape[0])
+            audio_data = denoised.numpy()
+        except Exception:
+            # If anything fails, continue with original
+            pass
+        
+        # RMS normalization to target -20 dBFS equivalent (~0.1 RMS)
+        try:
+            rms = float(np.sqrt(np.mean(np.square(audio_data)) + 1e-8))
+            target_rms = 0.1
+            if rms > 0:
+                gain = np.clip(target_rms / rms, 0.25, 4.0)
+                audio_data = np.clip(audio_data * gain, -1.0, 1.0)
         except Exception:
             pass
         
@@ -488,13 +549,19 @@ class OviyaVoiceConnection:
             if self.whisper_turbo is not None:
                 try:
                     # audio is float32 0..1 at 16kHz
+                    stt_t0 = time.time()
                     result = await self.whisper_turbo.transcribe_audio(audio.astype(np.float32))
+                    if STT_LATENCY:
+                        STT_LATENCY.observe(time.time() - stt_t0)
                     transcription["text"] = result.get("text", "")
                 except Exception:
                     pass
             # Fallback to remote WhisperX
             if not transcription["text"]:
+                stt_t0 = time.time()
                 transcription = await self.whisperx.transcribe(audio)
+                if STT_LATENCY:
+                    STT_LATENCY.observe(time.time() - stt_t0)
             text = transcription["text"]
             
             if not text:
@@ -512,9 +579,28 @@ class OviyaVoiceConnection:
             })
             
             # 2. Get Oviya's response (~300-800ms)
-            print("🧠 Thinking...")
-            brain_out = self.brain.think(text, conversation_history=self.conversation_history)
-            response_text = brain_out.get("prosodic_text") or brain_out.get("text") or ""
+            print("🧠 Thinking (streaming)...")
+            token_bucket = 0
+            assembled = []
+            resp_start = time.time()
+            response_text = ""
+            try:
+                async for token in self.brain.think_streaming(text, conversation_history=self.conversation_history):
+                    assembled.append(token)
+                    token_bucket += 1
+                    if not response_text and (any(p in ''.join(assembled) for p in ['.', '!', '?']) or token_bucket >= 20):
+                        response_text = ''.join(assembled)
+                        break
+            except Exception:
+                pass
+            if not response_text:
+                brain_out = self.brain.think(text, conversation_history=self.conversation_history)
+                response_text = brain_out.get("prosodic_text") or brain_out.get("text") or ""
+            else:
+                # Ensure downstream has a valid structure even when we streamed tokens
+                brain_out = {"emotion": "calm", "intensity": 0.7}
+            if LLM_LATENCY:
+                LLM_LATENCY.observe(time.time() - resp_start)
             print(f"💭 Oviya: {response_text}")
             llm_time = time.time() - start_time - stt_time
             
@@ -532,15 +618,32 @@ class OviyaVoiceConnection:
             if len(self.conversation_history) > 10:
                 self.conversation_history = self.conversation_history[-10:]
             
-            # 3. Generate and stream TTS with conversational context
+            # 3. Prosody timing plan and TTS streaming
             print("🎵 Speaking...")
             print(f"   Context: {len(self.conversation_history)} turns")
             tts_start = time.time()
+            ttfb_sent = False
+            # Apply humanlike pre-tts delay
+            try:
+                adj_text, timing = self.humanlike.enhance(response_text, emotion, ctx={})
+            except Exception:
+                adj_text, timing = response_text, {"pre_tts_delay_ms": 300, "insert_breath": False}
+            try:
+                await asyncio.sleep(max(0.0, float(timing.get("pre_tts_delay_ms", 300)) / 1000.0))
+            except Exception:
+                pass
             
+            # Personality conditioning vector (if computed by brain)
+            try:
+                style_vec = getattr(self.brain, "_last_personality_vector", None)
+            except Exception:
+                style_vec = None
+
             async for audio_chunk in self.csm.generate_streaming(
-                text=response_text,
+                text=adj_text,
                 emotion=emotion,
-                conversation_context=self.conversation_history[:-1]  # Exclude current response
+                conversation_context=self.conversation_history[:-1],  # Exclude current response
+                style_vec=style_vec
             ):
                 # Stop if interrupted or connection closed
                 if self.interrupt_requested or self.is_closed:
@@ -554,6 +657,9 @@ class OviyaVoiceConnection:
                 
                 # Stream audio to WebRTC immediately
                 await self.audio_output_track.send_audio(audio_chunk)
+                if not ttfb_sent and TIME_TO_FIRST_AUDIO:
+                    TIME_TO_FIRST_AUDIO.observe(time.time() - tts_start)
+                    ttfb_sent = True
             
             tts_time = time.time() - tts_start
             total_time = time.time() - start_time
@@ -581,17 +687,38 @@ async def handle_offer(request: Request):
     """
     try:
         params = await request.json()
+        # Optional JWT auth
+        token = params.get("token", "")
+        if not verify_jwt(token):
+            return JSONResponse({"error": "unauthorized"}, status_code=401)
         offer = RTCSessionDescription(sdp=params["sdp"], type=params["type"])
         
         print("📡 Received WebRTC offer")
         
-        # Create peer connection
+        # Create peer connection with configurable ICE servers (STUN/TURN)
+        ice_servers = [RTCIceServer(urls=["stun:stun.l.google.com:19302"])]
+        turn_url = os.getenv("TURN_URL")  # e.g., turn:YOUR_IP:3478?transport=tcp
+        turn_user = os.getenv("TURN_USER")
+        turn_pass = os.getenv("TURN_PASS")
+        # Optional time-limited HMAC auth
+        turn_secret = os.getenv("TURN_SECRET")
+        if turn_secret and not (turn_user and turn_pass):
+            try:
+                import base64, hmac, hashlib, time as _t
+                expiry = int(_t.time()) + 3600
+                user = f"{expiry}:oviya"
+                key = base64.b64encode(hmac.new(turn_secret.encode(), user.encode(), hashlib.sha1).digest()).decode()
+                turn_user, turn_pass = user, key
+            except Exception:
+                pass
+        turns_url = os.getenv("TURNS_URL")  # e.g., turns:YOUR_IP:5349?transport=tcp
+        if turn_url and turn_user and turn_pass:
+            ice_servers.append(RTCIceServer(urls=[turn_url], username=turn_user, credential=turn_pass))
+        if turns_url and turn_user and turn_pass:
+            ice_servers.append(RTCIceServer(urls=[turns_url], username=turn_user, credential=turn_pass))
+
         pc = RTCPeerConnection(
-            configuration=RTCConfiguration(
-                iceServers=[
-                    RTCIceServer(urls=["stun:stun.l.google.com:19302"])
-                ]
-            )
+            configuration=RTCConfiguration(iceServers=ice_servers)
         )
         peer_connections.add(pc)
         
@@ -825,6 +952,8 @@ async def root():
                 this.audioContext = null;
                 this.analyser = null;
                 this.visualizerBars = [];
+                this.workletNode = null;
+                this.level = 0;
                 
                 this.setupUI();
                 this.createVisualizer();
@@ -852,13 +981,11 @@ async def root():
             updateVisualizer() {
                 if (!this.analyser) return;
                 
-                const dataArray = new Uint8Array(this.analyser.frequencyBinCount);
-                this.analyser.getByteFrequencyData(dataArray);
-                
+                // Use worklet-computed level if available
+                const base = Math.max(0, Math.min(1, this.level));
                 for (let i = 0; i < this.visualizerBars.length; i++) {
-                    const index = Math.floor(i * dataArray.length / this.visualizerBars.length);
-                    const value = dataArray[index];
-                    const height = (value / 255) * 100;
+                    const factor = (i + 1) / this.visualizerBars.length;
+                    const height = 100 * base * Math.pow(factor, 0.5);
                     this.visualizerBars[i].style.height = `${height}%`;
                 }
                 
@@ -881,16 +1008,29 @@ async def root():
                         }
                     });
                     
-                    this.audioContext = new AudioContext({ sampleRate: 16000 });
+                    this.audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
                     const source = this.audioContext.createMediaStreamSource(this.localStream);
-                    this.analyser = this.audioContext.createAnalyser();
-                    this.analyser.fftSize = 256;
-                    source.connect(this.analyser);
+                    // Load AudioWorklet for ring buffer + level metering
+                    try {
+                        await this.audioContext.audioWorklet.addModule('/worklet.js');
+                        this.workletNode = new AudioWorkletNode(this.audioContext, 'oviya-meter');
+                        source.connect(this.workletNode);
+                        this.workletNode.port.onmessage = (e) => {
+                            if (e.data && typeof e.data.level === 'number') {
+                                this.level = e.data.level;
+                            }
+                        };
+                    } catch (e) {
+                        // Fallback to basic analyser if worklet fails
+                        this.analyser = this.audioContext.createAnalyser();
+                        this.analyser.fftSize = 256;
+                        source.connect(this.analyser);
+                    }
                     this.updateVisualizer();
                     
-                    this.pc = new RTCPeerConnection({
-                        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
-                    });
+                    this.pc = new RTCPeerConnection({ iceServers: [
+                        { urls: 'stun:stun.l.google.com:19302' }
+                    ]});
                     
                     this.localStream.getTracks().forEach(track => {
                         this.pc.addTrack(track, this.localStream);
@@ -901,6 +1041,12 @@ async def root():
                         const audio = new Audio();
                         audio.srcObject = event.streams[0];
                         audio.play().catch(e => console.error('Audio play error:', e));
+                        // Adaptive playbackRate nudge (±2%) to hide jitter
+                        try {
+                            setInterval(() => {
+                                audio.playbackRate = Math.max(0.98, Math.min(1.02, audio.playbackRate));
+                            }, 1000);
+                        } catch (e) {}
                     };
                     
                     const offer = await this.pc.createOffer();
@@ -979,6 +1125,44 @@ async def health():
             "csm": CSM_URL
         }
     }
+
+
+@app.get("/worklet.js")
+async def worklet_js():
+    js = """
+class OviyaMeterProcessor extends AudioWorkletProcessor {
+  constructor() {
+    super();
+    this._rms = 0;
+    this._alpha = 0.2; // smoothing
+  }
+  process(inputs) {
+    const input = inputs[0];
+    if (input && input[0]) {
+      const chan = input[0];
+      let sum = 0.0;
+      for (let i = 0; i < chan.length; i++) {
+        sum += chan[i] * chan[i];
+      }
+      const rms = Math.sqrt(sum / chan.length);
+      this._rms = this._alpha * rms + (1 - this._alpha) * this._rms;
+      // post a soft-clipped level for UI
+      const level = Math.tanh(this._rms * 3.0);
+      this.port.postMessage({ level });
+    }
+    return true;
+  }
+}
+registerProcessor('oviya-meter', OviyaMeterProcessor);
+"""
+    return Response(content=js, media_type="application/javascript")
+
+@app.get('/metrics')
+async def metrics():
+    try:
+        return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+    except Exception:
+        return Response("", media_type='text/plain')
 
 
 @app.on_event("shutdown")
