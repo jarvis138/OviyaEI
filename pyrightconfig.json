@@ -1,0 +1,17 @@
+{
+  "include": [
+    "oviya-production",
+    "production"
+  ],
+  "pythonVersion": "3.9",
+  "pythonPlatform": "Darwin",
+  "typeCheckingMode": "basic",
+  "useLibraryCodeForTypes": true,
+  "reportMissingImports": "warning",
+  "reportMissingTypeStubs": "none",
+  "pythonPath": "/Library/Developer/CommandLineTools/usr/bin/python3",
+  "extraPaths": [
+    "/Users/jarvis/Library/Python/3.9/lib/python/site-packages",
+    "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/site-packages"
+  ]
+}

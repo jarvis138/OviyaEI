@@ -1,52 +1,18 @@
-# Oviya Production Requirements
-
-# Core dependencies
-torch>=2.0.0
-torchaudio>=2.0.0
-numpy>=1.24.0
-
-# LLM integration
-requests>=2.31.0
-
-# Audio processing
-soundfile>=0.12.1
-
-# Hugging Face integration (for OpenVoiceV2)
-huggingface-hub>=0.20.0
-transformers>=4.40.0
-
-# OpenVoiceV2 will be installed separately via:
-# git clone https://github.com/myshell-ai/OpenVoice.git external/OpenVoice
-# cd external/OpenVoice && pip install -e .
-
-# Optional: For development/testing
-pytest>=7.4.0
-pytest-cov>=4.1.0
-
-# Optional: For audio analysis
-librosa>=0.10.0
-scipy>=1.10.0
-
-# WhisperX and VAD dependencies for real-time voice input
-whisperx>=3.1.1
-git+https://github.com/snakers4/silero-vad.git
-sounddevice>=0.4.6  # For real-time audio recording
-
-# Acoustic emotion detection
-# transformers already included above for OpenVoiceV2
-
-# Speaker diarization (optional, requires HuggingFace token)
-# pyannote.audio>=3.1.0  # Uncomment if using diarization
-
-# Audio normalization and mastering
-pyloudnorm>=0.1.1
-
-# WebSocket server
+# WebSocket Server Dependencies
 fastapi>=0.109.0
 uvicorn[standard]>=0.27.0
 python-multipart>=0.0.6
 websockets>=12.0
 
+# Core dependencies
+numpy>=1.24.0
+torch>=2.0.0
+torchaudio>=2.0.0
+
+# Audio processing
+faster-whisper>=1.1.1
+soundfile>=0.12.1
+
 # Additional utilities
 python-dotenv>=1.0.0
-
+prometheus-client>=0.19.0

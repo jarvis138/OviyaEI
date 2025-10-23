@@ -1,6 +1,6 @@
 import torch
-from oviya-production.brain.empathy_fusion_head import EmpathyFusionHead
-from oviya-production.brain.personality_vector import PersonalityEMA
+from production.brain.empathy_fusion_head import EmpathyFusionHead
+from production.brain.personality_vector import PersonalityEMA
 
 
 def test_fusion_head_softmax_and_ema():
@@ -19,5 +19,7 @@ def test_fusion_head_softmax_and_ema():
     v2 = ema.update(p[0])
     assert v1.shape[0] == 5 and v2.shape[0] == 5
     assert abs(float(v2.sum()) - 1.0) < 1e-5
+
+
 
 

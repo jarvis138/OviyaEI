@@ -13,3 +13,7 @@ def health():
 def empathy(payload: dict):
     # Placeholder demo response for fundraising/demo purposes
     return {"reply": "I hear you. That sounds difficult. I'm here with you."}
+
+
+
+
