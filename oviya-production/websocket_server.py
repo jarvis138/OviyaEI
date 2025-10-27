@@ -14,12 +14,15 @@ from typing import Dict, Optional, List
 import torch
 from pathlib import Path
 import time
-from collections import deque
 import os
+import sys
+
+# Add parent directory to path to find core modules
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 # Optional JWT auth (fallback to allow if PyJWT missing or secret unset)
 try:
-    import jwt  # PyJWT
+    import jwt  # type: ignore  # PyJWT - optional dependency
     def verify_jwt(token: str) -> bool:
         secret = os.getenv("OVIYA_SECRET", "")
         if not secret:
@@ -29,7 +32,7 @@ try:
             return True
         except Exception:
             return False
-except Exception:
+except ImportError:
     def verify_jwt(token: str) -> bool:
         return True
 
@@ -55,7 +58,7 @@ def allow(ip: str) -> bool:
 
 # Metrics
 try:
-    from prometheus_client import Summary, Histogram, Counter, CONTENT_TYPE_LATEST, generate_latest
+    from prometheus_client import Summary, Histogram, Counter, CONTENT_TYPE_LATEST, generate_latest  # type: ignore
     STT_LATENCY = Summary('oviya_stt_latency_seconds', 'STT processing time per turn')
     LLM_LATENCY = Summary('oviya_llm_latency_seconds', 'LLM processing time per turn')
     TTS_LATENCY = Summary('oviya_tts_latency_seconds', 'TTS generation time per turn')
@@ -65,39 +68,34 @@ try:
     TTS_H = Histogram('oviya_tts_seconds', 'TTS latency', buckets=(.05,.1,.2,.3,.5,.75,1,2))
     TTFB_H = Histogram('oviya_ttfb_seconds', 'TTFB', buckets=(.05,.1,.2,.3,.5,.75,1))
     ERRORS = Counter('oviya_ws_errors_total', 'WebSocket errors')
-except Exception:
+except ImportError:
     STT_LATENCY = LLM_LATENCY = TTS_LATENCY = TIME_TO_FIRST_AUDIO = None
     STT_H = LLM_H = TTS_H = TTFB_H = ERRORS = None
 
 # Import Oviya components
-from voice.realtime_input_remote import RealTimeVoiceInput  # Using remote WhisperX API on Vast.ai
-from emotion_detector.detector import EmotionDetector
-from brain.llm_brain import OviyaBrain
-from brain.secure_base import SecureBaseSystem
-from brain.bids import BidResponseSystem
-from emotion_controller.controller import EmotionController
-from voice.openvoice_tts import HybridVoiceEngine
-from voice.csm_1b_client import CSM1BClient
-from voice.acoustic_emotion_detector import AcousticEmotionDetector
-from brain.personality_store import PersonalityStore
-from config.service_urls import OLLAMA_URL, CSM_URL
+from production.voice.realtime_input import RealTimeVoiceInput  # Using remote WhisperX API on Vast.ai
+from production.emotion_detector.detector import EmotionDetector
+from production.brain.llm_brain import OviyaBrain
+from production.brain.secure_base import SecureBaseSystem
+from production.brain.bids import BidResponseSystem
+from production.emotion_controller.controller import EmotionController
+from production.voice.openvoice_tts import HybridVoiceEngine
+from production.voice.csm_1b_client import CSM1BClient
+from production.voice.acoustic_emotion_detector import AcousticEmotionDetector
+from production.brain.personality_store import PersonalityStore
+from production.config.service_urls import OLLAMA_URL, CSM_URL
 from faster_whisper import WhisperModel
-import time
 
 # Prefer local adapter, fallback to WebRTC implementation
 try:
-    from voice.silero_vad_adapter import SileroVAD  # decoupled adapter
+    from production.voice.silero_vad_adapter import SileroVAD  # decoupled adapter
     _HAS_SILERO_VAD = True
 except Exception:
-    try:
-        from voice_server_webrtc import SileroVAD  # fallback
-        _HAS_SILERO_VAD = True
-    except Exception:
-        _HAS_SILERO_VAD = False
+    _HAS_SILERO_VAD = False
 
 # Optional session cleanup helper
 try:
-    from voice.session_state import cleanup_sessions
+    from production.voice.session_state import cleanup_sessions
     _HAS_SESSION_CLEANUP = True
 except Exception:
     _HAS_SESSION_CLEANUP = False
@@ -105,7 +103,7 @@ except Exception:
 app = FastAPI(title="Oviya WebSocket Server")
 api_v1 = APIRouter(prefix="/v1")
 try:
-    from serving.conditioning_api import router as conditioning_router
+    from core.serving.conditioning_api import router as conditioning_router
     app.include_router(conditioning_router)
 except Exception:
     pass
@@ -151,9 +149,9 @@ app.add_middleware(
 @app.on_event("startup")
 async def startup_event():
     """Pre-initialize models on startup"""
-    print("🚀 Pre-initializing models...")
+    print("Pre-initializing models...")
     get_global_models()
-    print("✅ Server ready for connections")
+    print("Server ready for connections")
     if _HAS_SESSION_CLEANUP:
         async def _cleanup_loop():
             while True:
@@ -175,15 +173,30 @@ _global_acoustic_emotion = None
 def get_global_models():
     """Initialize and return global model instances"""
     global _global_voice_input, _global_emotion_detector, _global_acoustic_emotion
-    
+
     if _global_voice_input is None:
-        print("🎤 Initializing global models (one-time setup)...")
-        _global_voice_input = RealTimeVoiceInput(enable_diarization=False)
-        _global_voice_input.initialize_models()
-        _global_emotion_detector = EmotionDetector()
-        _global_acoustic_emotion = AcousticEmotionDetector()
-        print("✅ Global models initialized")
-    
+        print("Initializing global models (one-time setup)...")
+        try:
+            _global_voice_input = RealTimeVoiceInput(enable_diarization=False)
+            _global_voice_input.initialize_models()
+        except Exception as e:
+            print(f"Warning: Failed to initialize voice input: {e}")
+            _global_voice_input = None
+
+        try:
+            _global_emotion_detector = EmotionDetector()
+        except Exception as e:
+            print(f"Warning: Failed to initialize emotion detector: {e}")
+            _global_emotion_detector = None
+
+        try:
+            _global_acoustic_emotion = AcousticEmotionDetector()
+        except Exception as e:
+            print(f"Warning: Failed to initialize acoustic emotion detector: {e}")
+            _global_acoustic_emotion = None
+
+        print("Global models initialization complete")
+
     return _global_voice_input, _global_emotion_detector, _global_acoustic_emotion
 
 
@@ -273,12 +286,12 @@ class ConversationSession:
         # Load user personality
         self.personality = personality_store.load_personality(user_id)
         if self.personality:
-            print(f"📚 Loaded personality for {user_id}")
+            print(f"Loaded personality for {user_id}")
             # Inject personality context into brain
             context = personality_store.get_conversation_summary(user_id, last_n=5)
             self.brain.context = context
-        
-        print(f"✅ Conversation session initialized for {user_id}")
+
+        print(f"Conversation session initialized for {user_id}")
 
         # Streaming state
         self._tts_stream_task: Optional[asyncio.Task] = None
@@ -311,12 +324,13 @@ class ConversationSession:
         audio_array = np.frombuffer(audio_data, dtype=np.int16).astype(np.float32) / 32768.0
         
         # Add to legacy voice input buffer (for fallback)
-        self.voice_input.add_audio_chunk(audio_array)
+        if self.voice_input is not None:
+            self.voice_input.add_audio_chunk(audio_array)
         # Also feed streaming STT
         self.stt.add_audio(audio_data)
-        
+
         # Check for transcription
-        result = self.voice_input.get_transcription(timeout=0.01)
+        result = self.voice_input.get_transcription(timeout=0.01) if self.voice_input is not None else None
         
         return result
 
@@ -351,22 +365,22 @@ class ConversationSession:
                 'audio_chunks': List[bytes]  # Base64 encoded
             }
         """
-        print(f"🧠 Generating response for: '{user_text}' (emotion: {user_emotion})")
-        
+        print(f"Generating response for: '{user_text}' (emotion: {user_emotion})")
+
         # Generate brain response
         response = self.brain.think(user_text, user_emotion)
-        print(f"💬 Brain response: '{response['text']}' (emotion: {response['emotion']})")
-        
+        print(f"Brain response: '{response['text']}' (emotion: {response['emotion']})")
+
         # Map to CSM emotion
         oviya_emotion_params = self.emotion_controller.map_emotion(
             response['emotion'],
             response['intensity']
         )
         oviya_emotion = oviya_emotion_params['style_token']
-        print(f"🎭 Mapped emotion: {oviya_emotion}")
-        
+        print(f"Mapped emotion: {oviya_emotion}")
+
         # Generate audio
-        print(f"🎤 Generating TTS audio...")
+        print(f"Generating TTS audio...")
         audio_tensor = self.tts.generate(
             text=response['text'],
             emotion_params=oviya_emotion_params
@@ -378,11 +392,11 @@ class ConversationSession:
             audio_shape = f"len={len(audio_tensor)}"
         else:
             audio_shape = 'unknown'
-        print(f"🎵 TTS generated: shape={audio_shape}")
-        
+        print(f"TTS generated: shape={audio_shape}")
+
         # Convert audio to chunks for streaming
         audio_chunks = self._chunk_audio(audio_tensor)
-        print(f"📦 Created {len(audio_chunks)} audio chunks")
+        print(f"Created {len(audio_chunks)} audio chunks")
         
         # Save conversation turn
         personality_store.add_conversation_turn(self.user_id, {
@@ -471,14 +485,14 @@ class ConversationSession:
                             'sample_rate': 24000,
                             'audio_base64': base64.b64encode((arr * 32767).astype(np.int16).tobytes()).decode('utf-8')
                         })
-                                if not ttfb_sent:
-                                    try:
-                                        await websocket.send_json({'type': 'first_audio_chunk'})
-                                    except Exception:
-                                        pass
-                                    if TIME_TO_FIRST_AUDIO:
-                                        TIME_TO_FIRST_AUDIO.observe(time.time() - start_time)
-                                    ttfb_sent = True
+                        if not ttfb_sent:
+                            try:
+                                await websocket.send_json({'type': 'first_audio_chunk'})
+                            except Exception:
+                                pass
+                            if TIME_TO_FIRST_AUDIO:
+                                TIME_TO_FIRST_AUDIO.observe(time.time() - start_time)
+                            ttfb_sent = True
                         buf, n = [], 0
                 if not self._tts_cancel_requested and buf:
                     arr = np.concatenate(buf)
@@ -578,7 +592,7 @@ async def get():
         </style>
     </head>
     <body>
-        <h1>🎤 Oviya Voice Chat</h1>
+        <h1>Oviya Voice Chat</h1>
         <div id="status" class="disconnected">Disconnected</div>
         <button id="connectBtn">Connect</button>
         <button id="recordBtn" disabled>Start Recording</button>
@@ -748,7 +762,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str = "anonymous"):
         return
     await websocket.accept()
     
-    print(f"🔌 WebSocket connected: {user_id}")
+    print(f"WebSocket connected: {user_id}")
     
     # Create conversation session
     session = ConversationSession(user_id)
@@ -797,18 +811,18 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str = "anonymous"):
                             await websocket.send_json({'type': 'reference_voice_set', 'ok': False, 'error': str(e)})
                         continue
                     if data.get('type') == 'greeting':
-                        print(f"👋 Greeting request from {user_id}")
+                        print(f"Greeting request from {user_id}")
                         try:
                             # Generate greeting response - simulate user saying "Hello"
                             greeting_response = await session.generate_response(
                                 "Hello",  # User's greeting
                                 "neutral"  # User emotion
                             )
-                            
-                            print(f"✅ Greeting generated: {len(greeting_response.get('audio_chunks', []))} chunks")
+
+                            print(f"Greeting generated: {len(greeting_response.get('audio_chunks', []))} chunks")
                             print(f"   Text: {greeting_response.get('text')}")
                             print(f"   Emotion: {greeting_response.get('emotion')}")
-                            
+
                             # Send greeting to client
                             await websocket.send_json({
                                 'type': 'response',
@@ -817,9 +831,9 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str = "anonymous"):
                                 'audio_chunks': greeting_response['audio_chunks'],
                                 'duration': greeting_response['duration']
                             })
-                            print(f"✅ Greeting sent to client")
+                            print(f"Greeting sent to client")
                         except Exception as e:
-                            print(f"❌ Error generating greeting: {e}")
+                            print(f"Error generating greeting: {e}")
                             import traceback
                             traceback.print_exc()
                             await websocket.send_json({
@@ -827,13 +841,13 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str = "anonymous"):
                                 'message': str(e)
                             })
                 except json.JSONDecodeError as e:
-                    print(f"⚠️ Invalid JSON received: {e}")
+                    print(f"Warning: Invalid JSON received: {e}")
                 continue
             
             elif 'bytes' in message:
                 # Handle audio data
                 audio_data = message['bytes']
-                print(f"🎤 Received audio: {len(audio_data)} bytes")
+                print(f"Received audio: {len(audio_data)} bytes")
                 
                 # Process audio chunk
                 result = await session.process_audio_chunk(audio_data)
@@ -859,7 +873,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str = "anonymous"):
                         ))
                 
                 # Prefer Silero VAD if available to decide end-of-speech
-                if session.silero_vad is not None:
+                if session.silero_vad is not None and hasattr(session.silero_vad, 'process_chunk'):
                     # Convert to float32 16k and process in 512-sample windows
                     pcm16 = np.frombuffer(audio_data, dtype=np.int16).astype(np.float32) / 32768.0
                     buf = np.concatenate([session._silero_remainder, pcm16]) if len(session._silero_remainder) else pcm16
@@ -869,7 +883,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str = "anonymous"):
                     eos_audio = None
                     while idx + win <= len(buf):
                         chunk = buf[idx:idx+win]
-                        is_speech, end_of_speech, audio_to_process = session.silero_vad.process_chunk(chunk)
+                        is_speech, end_of_speech, audio_to_process = session.silero_vad.process_chunk(chunk)  # type: ignore
                         if end_of_speech and audio_to_process is not None and len(audio_to_process) > 0:
                             eos_detected = True
                             eos_audio = audio_to_process
@@ -879,16 +893,19 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str = "anonymous"):
                     if eos_detected and not session.is_generating:
                         session.is_generating = True
                         # Transcribe eos_audio quickly with faster-whisper
-                        try:
-                            segments, _ = session.stt.model.transcribe(
-                                eos_audio.astype(np.float32),
-                                beam_size=1,
-                                vad_filter=False,
-                                without_timestamps=True,
-                                language="en"
-                            )
-                            text = " ".join(s.text.strip() for s in segments if getattr(s, 'text', '').strip()).strip()
-                        except Exception:
+                        if eos_audio is not None:
+                            try:
+                                segments, _ = session.stt.model.transcribe(
+                                    eos_audio.astype(np.float32),
+                                    beam_size=1,
+                                    vad_filter=False,
+                                    without_timestamps=True,
+                                    language="en"
+                                )
+                                text = " ".join(s.text.strip() for s in segments if getattr(s, 'text', '').strip()).strip()
+                            except Exception:
+                                text = partial or (result['text'] if result else '')
+                        else:
                             text = partial or (result['text'] if result else '')
                         asyncio.create_task(session.generate_response_streaming(
                             websocket,
@@ -925,7 +942,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str = "anonymous"):
                     # No full transcription yet
                     continue
                 
-                print(f"📝 Got transcription: '{result['text'][:50]}...'")
+                print(f"Got transcription: '{result['text'][:50]}...'")
                     
                 # Send transcription to client
                 await websocket.send_json({
@@ -936,18 +953,42 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str = "anonymous"):
                 })
                 
                 # Detect emotion from audio + text
-                acoustic_emotion = session.acoustic_emotion.detect_emotion(
-                    np.frombuffer(audio_data, dtype=np.int16).astype(np.float32) / 32768.0
-                )
-                
-                text_emotion = session.emotion_detector.detect_emotion(result['text'])
-                
+                if session.acoustic_emotion is not None:
+                    acoustic_emotion = session.acoustic_emotion.detect_emotion(
+                        np.frombuffer(audio_data, dtype=np.int16).astype(np.float32) / 32768.0
+                    )
+                else:
+                    # Fallback if acoustic emotion detector failed to initialize
+                    acoustic_emotion = {
+                        'emotion': 'neutral',
+                        'confidence': 0.5,
+                        'arousal': 0.5,
+                        'valence': 0.5,
+                        'oviya_emotions': ['neutral'],
+                        'acoustic_features': {},
+                        'method': 'fallback'
+                    }
+
+                text_emotion_result = session.emotion_detector.detect_emotion(result['text']) if session.emotion_detector else {'emotion': 'neutral', 'confidence': 0.5}
+                text_emotion = text_emotion_result['emotion']
+
                 # Combine emotions
-                combined = session.acoustic_emotion.combine_with_text_emotion(
-                    acoustic_emotion,
-                    text_emotion,
-                    acoustic_weight=0.6
-                )
+                if session.acoustic_emotion is not None:
+                    combined = session.acoustic_emotion.combine_with_text_emotion(
+                        acoustic_emotion,
+                        text_emotion,
+                        text_confidence=text_emotion_result['confidence'],
+                        acoustic_weight=0.6
+                    )
+                else:
+                    # Fallback: use text emotion only
+                    combined = {
+                        'emotion': text_emotion,
+                        'confidence': text_emotion_result['confidence'],
+                        'source': 'text_only',
+                        'acoustic_result': acoustic_emotion,
+                        'text_emotion': text_emotion
+                    }
                 
                 # If not already generating from partials, start now
                 if not session.is_generating:
@@ -960,9 +1001,9 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str = "anonymous"):
                     session.is_generating = False
     
     except WebSocketDisconnect:
-        print(f"🔌 WebSocket disconnected: {user_id}")
+        print(f"WebSocket disconnected: {user_id}")
     except Exception as e:
-        print(f"❌ WebSocket error: {e}")
+        print(f"WebSocket error: {e}")
         await websocket.send_json({
             'type': 'error',
             'message': str(e)
@@ -1018,7 +1059,7 @@ if __name__ == "__main__":
     import uvicorn
     
     print("=" * 60)
-    print("🚀 Starting Oviya WebSocket Server")
+    print("Starting Oviya WebSocket Server")
     print("=" * 60)
     print(f"   Ollama URL: {OLLAMA_URL}")
     print(f"   CSM URL: {CSM_URL}")

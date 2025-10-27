@@ -1,6 +1,6 @@
 import time
 import numpy as np
-from oviya-production.voice.csm_streaming_pipeline import CSMStreamingPipeline
+from production.voice.csm_streaming_pipeline import CSMStreamingPipeline
 
 
 def test_fast_start_ttfb_under_limit():
@@ -11,5 +11,7 @@ def test_fast_start_ttfb_under_limit():
     ttfb = (time.time() - start) * 1000.0
     assert isinstance(first, np.ndarray)
     assert ttfb < 500.0
+
+
 
 
