@@ -1,0 +1,85 @@
+# CodeRabbit Configuration
+# https://docs.coderabbit.ai/guides/configure-coderabbit
+
+# General settings
+review:
+  # Enable draft PR reviews
+  draft: true
+
+  # Auto-review on push to PR
+  auto_review:
+    enabled: true
+    # Only review if there are meaningful changes
+    min_code_suggestions: 1
+    min_comments: 1
+
+  # Request changes if critical issues found
+  request_changes_workflow: true
+
+# Language-specific settings
+python:
+  # Use black for Python formatting
+  formatter: black
+
+  # Python-specific review rules
+  review:
+    # Enable type checking suggestions
+    type_check: true
+
+    # Focus on these areas
+    focus_areas:
+      - performance
+      - security
+      - maintainability
+      - testing
+
+# File patterns to review
+path_filters:
+  # Exclude these paths from review
+  exclude:
+    - "**/*.md"
+    - "**/*.txt"
+    - "**/docs/**"
+    - "**/tests/**"
+    - "**/test_*.py"
+    - "**/__pycache__/**"
+    - "**/.pytest_cache/**"
+    - "**/node_modules/**"
+    - "**/build/**"
+    - "**/dist/**"
+    - "**/.git/**"
+    - "**/migrations/**"
+
+# Custom review rules for Oviya EI
+custom_rules:
+  # Voice AI specific checks
+  - name: "GPU Memory Management"
+    pattern: "torch\.cuda"
+    message: "Ensure proper GPU memory management with torch.cuda.empty_cache() or context managers"
+    level: warning
+
+  - name: "Async Error Handling"
+    pattern: "async def.*websocket"
+    message: "WebSocket handlers should have proper exception handling for connection drops"
+    level: warning
+
+  - name: "Model Loading Validation"
+    pattern: "load.*model|\.load\("
+    message: "Add validation after model loading to ensure successful load"
+    level: info
+
+  - name: "Security Headers"
+    pattern: "FastAPI|flask|django"
+    message: "Ensure security headers are set for API endpoints handling sensitive voice data"
+    level: warning
+
+# Performance thresholds
+performance:
+  # Flag functions longer than this
+  max_function_lines: 50
+
+  # Flag files longer than this
+  max_file_lines: 500
+
+  # Flag high complexity
+  max_cyclomatic_complexity: 10

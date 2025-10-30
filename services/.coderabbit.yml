@@ -1,0 +1,72 @@
+# CodeRabbit Configuration for Services
+# https://docs.coderabbit.ai/guides/configure-coderabbit
+
+# General settings
+review:
+  # Enable draft PR reviews
+  draft: true
+
+  # Auto-review on push to PR
+  auto_review:
+    enabled: true
+    min_code_suggestions: 1
+    min_comments: 1
+
+  # Request changes if critical issues found
+  request_changes_workflow: true
+
+# Service-specific review rules
+custom_rules:
+  # Docker and containerization
+  - name: "Docker Security"
+    pattern: "FROM.*:"
+    message: "Use specific image tags instead of 'latest' for production deployments"
+    level: warning
+
+  - name: "Health Checks"
+    pattern: "HEALTHCHECK"
+    message: "Ensure health checks are properly configured for service monitoring"
+    level: info
+
+  # API Design
+  - name: "API Error Responses"
+    pattern: "HTTPException|status_code"
+    message: "Ensure consistent error response format across all services"
+    level: info
+
+  # Service Communication
+  - name: "Inter-service Communication"
+    pattern: "requests\.|httpx\.|aiohttp\."
+    message: "Add retry logic and circuit breaker patterns for inter-service calls"
+    level: warning
+
+  # Resource Management
+  - name: "Resource Cleanup"
+    pattern: "with.*:|\.close\(\)|\.disconnect\(\)"
+    message: "Ensure proper resource cleanup in service lifecycle"
+    level: warning
+
+  # Logging
+  - name: "Structured Logging"
+    pattern: "print\(|logging\."
+    message: "Use structured logging instead of print statements in production services"
+    level: info
+
+# Path filters specific to services
+path_filters:
+  include:
+    - "services/**"
+  exclude:
+    - "services/**/tests/**"
+    - "services/**/test_*.py"
+    - "services/**/__pycache__/**"
+    - "services/**/.pytest_cache/**"
+    - "**/*.md"
+    - "**/*.txt"
+    - "**/docs/**"
+
+# Performance monitoring
+performance:
+  max_function_lines: 30  # Services should be more modular
+  max_file_lines: 300
+  max_cyclomatic_complexity: 8

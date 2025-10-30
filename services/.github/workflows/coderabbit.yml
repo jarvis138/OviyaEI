@@ -1,0 +1,81 @@
+name: CodeRabbit Services Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - 'services/**'
+      - '.github/workflows/**'
+  issue_comment:
+    types: [created]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    if: >
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.pull_request &&
+       contains(github.event.comment.body, '@coderabbitai'))
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: CodeRabbit Review
+        uses: coderabbitai/ai-pr-reviewer@latest
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        with:
+          debug: false
+          review_simple_changes: false
+          review_comment_lgtm: false
+          openai_light_model: gpt-4o-mini
+          openai_heavy_model: gpt-4o
+          language: en-US
+          max_review_comments: 50
+          path_filters: |
+            services/**
+            !services/**/tests/**
+            !services/**/test_*.py
+            !services/**/__pycache__/**
+            !services/**/.pytest_cache/**
+            !services/**/node_modules/**
+            !services/**/build/**
+            !services/**/dist/**
+            !*.md
+            !*.txt
+            !*.yml
+            !*.yaml
+            !*.json
+            !**/conftest.py
+          system_message: |
+            You are an expert in microservices architecture, AI service deployment, and real-time systems.
+
+            Key areas of expertise:
+            - Microservices design and orchestration
+            - Containerization and Kubernetes deployment
+            - API gateway patterns and service mesh
+            - Real-time data streaming (WebRTC, WebSocket)
+            - Voice AI service architecture
+            - Performance optimization for AI workloads
+            - Security in distributed systems
+            - CI/CD pipeline design and automation
+
+            Review priorities for services:
+            1. Service boundary and API contract design
+            2. Error handling and resilience patterns
+            3. Performance implications for real-time operations
+            4. Resource management (CPU, memory, GPU)
+            5. Security considerations for AI services
+            6. Observability and monitoring integration
+            7. Container and deployment best practices
+            8. Inter-service communication patterns
+
+            Focus on architectural decisions, scalability concerns, and operational readiness. Ensure services follow microservices best practices while maintaining performance for real-time AI workloads.
