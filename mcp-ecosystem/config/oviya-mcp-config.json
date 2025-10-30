@@ -1,0 +1,115 @@
+{
+  "mcpServers": {
+    "openmemory": {
+      "command": "docker",
+      "args": ["exec", "openmemory", "python", "mcp_server.py"],
+      "env": {
+        "DATABASE_URL": "postgresql://oviya:oviya_password@localhost:5432/openmemory",
+        "QDRANT_URL": "http://localhost:6333"
+      }
+    },
+    "ai-therapist": {
+      "command": "npx",
+      "args": ["@danieldunderfelt/ai-therapist-mcp"],
+      "env": {}
+    },
+    "mcp-thinking": {
+      "command": "node",
+      "args": ["servers/tier1/mcp-thinking/dist/index.js"],
+      "env": {}
+    },
+    "rag-memory": {
+      "command": "python",
+      "args": ["servers/tier1/rag-memory/server.py"],
+      "env": {
+        "VECTOR_DB_PATH": "./mcp-ecosystem/data/vectors",
+        "EMBEDDING_MODEL": "text-embedding-3-small"
+      }
+    },
+    "chroma": {
+      "command": "python",
+      "args": ["-c", "from chroma_mcp import server; server.run()"],
+      "env": {
+        "CHROMA_HOST": "localhost",
+        "CHROMA_PORT": "8000",
+        "CHROMA_PERSIST_DIR": "./mcp-ecosystem/data/chroma"
+      }
+    },
+    "postgres": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-postgres"],
+      "env": {
+        "DATABASE_URL": "postgresql://oviya:oviya_password@localhost:5432/oviya_db"
+      }
+    },
+    "redis": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-redis"],
+      "env": {
+        "REDIS_URL": "redis://localhost:6379"
+      }
+    },
+    "oviya-personality": {
+      "command": "python",
+      "args": ["servers/custom-oviya/personality/server.py"],
+      "env": {
+        "MODEL_PATH": "/models",
+        "CONFIG_PATH": "production/config"
+      }
+    },
+    "oviya-emotion-prosody": {
+      "command": "python",
+      "args": ["servers/custom-oviya/emotion-prosody/server.py"],
+      "env": {
+        "VOICE_MODEL_PATH": "production/voice"
+      }
+    },
+    "oviya-situational-empathy": {
+      "command": "python",
+      "args": ["servers/custom-oviya/situational-empathy/server.py"],
+      "env": {
+        "SAFETY_CONFIG": "production/brain/safety_router.py"
+      }
+    },
+    "whatsapp": {
+      "command": "python",
+      "args": ["-m", "whatsapp_mcp"],
+      "env": {
+        "WHATSAPP_API_KEY": "${WHATSAPP_API_KEY}",
+        "WHATSAPP_WEBHOOK_SECRET": "${WHATSAPP_WEBHOOK_SECRET}"
+      }
+    },
+    "stripe": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-stripe"],
+      "env": {
+        "STRIPE_SECRET_KEY": "${STRIPE_SECRET_KEY}",
+        "STRIPE_PUBLISHABLE_KEY": "${STRIPE_PUBLISHABLE_KEY}"
+      }
+    }
+  },
+  "oviyaConfig": {
+    "memory": {
+      "primary": "openmemory",
+      "fallback": "rag-memory",
+      "embeddings": "chroma"
+    },
+    "safety": {
+      "crisis_detection": "ai-therapist",
+      "cognitive_modes": "mcp-thinking"
+    },
+    "data": {
+      "persistent": "postgres",
+      "cache": "redis"
+    },
+    "integrations": {
+      "messaging": "whatsapp",
+      "payments": "stripe"
+    },
+    "custom": {
+      "personality": "oviya-personality",
+      "emotion": "oviya-emotion-prosody",
+      "empathy": "oviya-situational-empathy"
+    }
+  }
+}

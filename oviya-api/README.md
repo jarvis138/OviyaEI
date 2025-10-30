@@ -26,3 +26,4 @@ docker run --rm -p 8080:8080 -e OVIYA_DATA_ROOT=oviya-corpus/normalized/ oviya-a
 
 
 
+

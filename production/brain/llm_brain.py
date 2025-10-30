@@ -572,7 +572,7 @@ class OviyaBrain:
                     response = requests.post(
                         self.ollama_url,
                         json=request_payload,
-                        timeout=30
+                        timeout=120  # Increased timeout for larger models
                     )
                     
                     if response.status_code == 200:
@@ -630,7 +630,7 @@ class OviyaBrain:
                     simple_response = requests.post(
                         self.ollama_url,
                         json={"model": self.model_name, "prompt": simple_prompt, "stream": False},
-                        timeout=30
+                        timeout=120  # Increased timeout for larger models
                     )
                     if simple_response.status_code == 200:
                         text = simple_response.json().get("response", "")

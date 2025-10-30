@@ -1,0 +1,266 @@
+version: '3.8'
+
+services:
+  # PostgreSQL for persistent data storage
+  postgres:
+    image: postgres:15-alpine
+    container_name: oviya-postgres
+    environment:
+      POSTGRES_DB: oviya_db
+      POSTGRES_USER: oviya
+      POSTGRES_PASSWORD: oviya_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U oviya -d oviya_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Redis for caching and real-time state
+  redis:
+    image: redis:7-alpine
+    container_name: oviya-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Qdrant vector database for OpenMemory
+  qdrant:
+    image: qdrant/qdrant:v1.7.4
+    container_name: oviya-qdrant
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+
+  # OpenMemory MCP Server
+  openmemory:
+    image: mem0ai/openmemory:latest
+    container_name: oviya-openmemory
+    environment:
+      DATABASE_URL: postgresql://oviya:oviya_password@postgres:5432/openmemory
+      QDRANT_URL: http://qdrant:6333
+      REDIS_URL: redis://redis:6379
+    ports:
+      - "3001:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  # Custom Oviya Personality MCP Server
+  oviya-personality:
+    build:
+      context: .
+      dockerfile: servers/custom-oviya/personality/Dockerfile
+    container_name: oviya-personality-mcp
+    environment:
+      MODEL_PATH: /models
+      CONFIG_PATH: /app/production/config
+      DATABASE_URL: postgresql://oviya:oviya_password@postgres:5432/oviya_db
+    volumes:
+      - ../../production:/app/production:ro
+    ports:
+      - "3002:3002"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  # Custom Oviya Emotion Prosody MCP Server
+  oviya-emotion-prosody:
+    build:
+      context: .
+      dockerfile: servers/custom-oviya/emotion-prosody/Dockerfile
+    container_name: oviya-emotion-prosody-mcp
+    environment:
+      VOICE_MODEL_PATH: /app/production/voice
+      REDIS_URL: redis://redis:6379
+    volumes:
+      - ../../production:/app/production:ro
+    ports:
+      - "3003:3003"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3003/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  # Custom Oviya Situational Empathy MCP Server
+  oviya-situational-empathy:
+    build:
+      context: .
+      dockerfile: servers/custom-oviya/situational-empathy/Dockerfile
+    container_name: oviya-situational-empathy-mcp
+    environment:
+      SAFETY_CONFIG: /app/production/brain/safety_router.py
+      DATABASE_URL: postgresql://oviya:oviya_password@postgres:5432/oviya_db
+    volumes:
+      - ../../production:/app/production:ro
+    ports:
+      - "3004:3004"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3004/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  # WhatsApp MCP Server
+  whatsapp-mcp:
+    build:
+      context: .
+      dockerfile: servers/tier2/whatsapp/Dockerfile
+    container_name: oviya-whatsapp-mcp
+    environment:
+      WHATSAPP_API_KEY: ${WHATSAPP_API_KEY}
+      WHATSAPP_WEBHOOK_SECRET: ${WHATSAPP_WEBHOOK_SECRET}
+      REDIS_URL: redis://redis:6379
+    ports:
+      - "3005:3005"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3005/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  # Stripe MCP Server for monetization
+  stripe-mcp:
+    build:
+      context: .
+      dockerfile: servers/tier3/stripe/Dockerfile
+    container_name: oviya-stripe-mcp
+    environment:
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
+      STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY}
+      DATABASE_URL: postgresql://oviya:oviya_password@postgres:5432/oviya_db
+    ports:
+      - "3006:3006"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3006/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  # PostgreSQL MCP Server
+  postgres-mcp:
+    build:
+      context: .
+      dockerfile: servers/tier2/postgres/Dockerfile
+    container_name: oviya-postgres-mcp
+    environment:
+      DATABASE_URL: postgresql://oviya:oviya_password@postgres:5432/oviya_db
+    ports:
+      - "3008:3008"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3008/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  # Redis MCP Server
+  redis-mcp:
+    build:
+      context: .
+      dockerfile: servers/tier2/redis/Dockerfile
+    container_name: oviya-redis-mcp
+    environment:
+      REDIS_URL: redis://redis:6379
+    ports:
+      - "3009:3009"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3009/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  # Monitoring and Analytics Service
+  monitoring:
+    build:
+      context: .
+      dockerfile: monitoring/Dockerfile
+    container_name: oviya-monitoring
+    environment:
+      DATABASE_URL: postgresql://oviya:oviya_password@postgres:5432/oviya_db
+      REDIS_URL: redis://redis:6379
+    ports:
+      - "3007:3007"
+    volumes:
+      - ../../logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3007/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  qdrant_data:
+    driver: local
+
+networks:
+  default:
+    name: oviya-mcp-network
