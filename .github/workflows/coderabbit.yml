@@ -1,0 +1,75 @@
+name: CodeRabbit Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  issue_comment:
+    types: [created]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    if: >
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.pull_request &&
+       contains(github.event.comment.body, '@coderabbitai'))
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: CodeRabbit Review
+        uses: coderabbitai/ai-pr-reviewer@latest
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        with:
+          debug: false
+          review_simple_changes: false
+          review_comment_lgtm: false
+          openai_light_model: gpt-4o-mini
+          openai_heavy_model: gpt-4o
+          language: en-US
+          max_review_comments: 50
+          path_filters: |
+            !*.md
+            !*.txt
+            !*.yml
+            !*.yaml
+            !*.json
+            !**/tests/**
+            !**/test_*.py
+            !**/conftest.py
+            !**/__pycache__/**
+            !**/.pytest_cache/**
+            !**/node_modules/**
+            !**/build/**
+            !**/dist/**
+          system_message: |
+            You are an expert Python/AI engineer specializing in voice AI, emotion detection, and real-time systems.
+
+            Key areas of expertise:
+            - Voice synthesis and speech processing (CSM, OpenVoice, Whisper)
+            - Emotion detection and empathy modeling
+            - Real-time streaming architectures
+            - Python performance optimization
+            - AI/ML model deployment and inference
+            - WebSocket and WebRTC implementations
+            - Docker containerization for AI workloads
+
+            Review priorities:
+            1. Code correctness and error handling
+            2. Performance implications for real-time systems
+            3. Memory management in GPU-intensive operations
+            4. Security considerations for voice data
+            5. API design consistency
+            6. Test coverage for critical paths
+            7. Documentation clarity
+
+            Be thorough but concise. Focus on actionable feedback that improves code quality, performance, and maintainability.
