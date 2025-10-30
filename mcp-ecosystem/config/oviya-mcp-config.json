@@ -14,9 +14,11 @@
       "env": {}
     },
     "mcp-thinking": {
-      "command": "node",
-      "args": ["servers/tier1/mcp-thinking/dist/index.js"],
-      "env": {}
+      "command": "python",
+      "args": ["servers/tier1/mcp-thinking/oviya_thinking_server.py"],
+      "env": {
+        "PYTHONPATH": "."
+      }
     },
     "rag-memory": {
       "command": "python",

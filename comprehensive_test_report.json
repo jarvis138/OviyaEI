@@ -1,0 +1,140 @@
+{
+  "test_summary": {
+    "total_tests": 7,
+    "passed_tests": 5,
+    "failed_tests": 2,
+    "success_rate": 71.42857142857143,
+    "timestamp": "2025-10-30T16:13:34.365508"
+  },
+  "component_results": {
+    "StrategicSilence_therapeutic_silence_calculation": {
+      "start_time": "2025-10-30T16:13:13.485838",
+      "status": "passed",
+      "logs": [],
+      "metrics": {
+        "test_cases_run": 3,
+        "avg_silence_duration": "1.67s",
+        "avg_therapeutic_value": "0.88",
+        "ma_weight_range": "0.2-0.4"
+      },
+      "errors": [],
+      "end_time": "2025-10-30T16:13:18.504802",
+      "result": "Average silence: 1.67s, Therapeutic value: 0.88",
+      "duration": 5.018964
+    },
+    "StrategicSilence_emotional_pacing": {
+      "start_time": "2025-10-30T16:13:18.504979",
+      "status": "passed",
+      "logs": [],
+      "metrics": {
+        "texts_processed": 3,
+        "total_pause_markers": 4,
+        "avg_pauses_per_text": "1.3",
+        "emotion_adaptive": true
+      },
+      "errors": [],
+      "end_time": "2025-10-30T16:13:18.505122",
+      "result": "Added 4 therapeutic pause markers",
+      "duration": 0.000143
+    },
+    "EmotionalReciprocity_response_enhancement": {
+      "start_time": "2025-10-30T16:13:18.505217",
+      "status": "passed",
+      "logs": [],
+      "metrics": {
+        "scenarios_tested": 3,
+        "reciprocity_instances": 0,
+        "avg_response_expansion": "0.0 chars",
+        "personality_alignment": true
+      },
+      "errors": [],
+      "end_time": "2025-10-30T16:13:18.987106",
+      "result": "Enhanced 3 responses with 0 reciprocity additions",
+      "duration": 0.481889
+    },
+    "MCP-Thinking_server_functionality": {
+      "start_time": "2025-10-30T16:13:18.987140",
+      "status": "failed",
+      "logs": [],
+      "metrics": {},
+      "errors": [
+        "Server startup failed:   File \"<string>\", line 1\n    import asyncio; from oviya_thinking_server import OviyaThinkingServer; async def test(): server = OviyaThinkingServer(); response = await server.handle_request({method: tools/list}); tools = response.get(tools, []); return len(tools); print(await test())\n                                                                           ^\nSyntaxError: invalid syntax\n"
+      ],
+      "end_time": "2025-10-30T16:13:19.014285",
+      "result": null,
+      "duration": 0.027145
+    },
+    "MCP-Thinking_llm_response_enhancement": {
+      "start_time": "2025-10-30T16:13:19.014322",
+      "status": "passed",
+      "logs": [],
+      "metrics": {
+        "scenarios_processed": 2,
+        "avg_response_length": "308 chars",
+        "avg_thinking_modes": "0.0",
+        "empathy_integration": "0/2",
+        "validation_present": "0/2",
+        "cognitive_depth": "enhanced"
+      },
+      "errors": [],
+      "end_time": "2025-10-30T16:13:19.015627",
+      "result": "Enhanced 2 responses with MCP-thinking integration",
+      "duration": 0.001305
+    },
+    "WebSocket_conversation_integration": {
+      "start_time": "2025-10-30T16:13:19.015679",
+      "status": "passed",
+      "logs": [],
+      "metrics": {
+        "workflow_steps": 4,
+        "success_rate": "100.0%",
+        "total_duration": "0.00s",
+        "avg_step_time": "0.00s",
+        "personality_computation": "0.00s",
+        "memory_retrieval": "0.00s",
+        "crisis_detection": "0.00s",
+        "empathy_generation": "0.00s"
+      },
+      "errors": [],
+      "end_time": "2025-10-30T16:13:33.524601",
+      "result": "Complete conversation workflow executed in 0.00s",
+      "duration": 14.508922
+    },
+    "SafetySystems_crisis_prevention": {
+      "start_time": "2025-10-30T16:13:33.524650",
+      "status": "failed",
+      "logs": [],
+      "metrics": {
+        "test_cases": 3,
+        "correct_detections": 2,
+        "accuracy": "66.7%",
+        "false_positives": 0,
+        "false_negatives": 1,
+        "escalation_triggered": 1
+      },
+      "errors": [],
+      "end_time": "2025-10-30T16:13:34.365433",
+      "result": "Crisis detection accuracy: 66.7% (2/3)",
+      "duration": 0.840783
+    }
+  },
+  "llm_comparisons": {
+    "MCP-Thinking Response Enhancement": {
+      "timestamp": "2025-10-30T16:13:19.015653",
+      "before_response": "I understand this is difficult for you.",
+      "after_response": "I hear the depth of what you're experiencing  What I'm hearing is that you're searching for clarity in this moment. Does that resonate?  Looking at your thought patterns: Your thinking shows thoughtful consideration  Try viewing this from a new perspective - what would you advise a friend in this situation?",
+      "improvements": [
+        "Added empathetic understanding",
+        "Integrated metacognitive awareness",
+        "Enhanced emotional validation"
+      ],
+      "metrics": {
+        "response_quality": "improved",
+        "cognitive_depth": "deepened",
+        "therapeutic_value": "enhanced",
+        "thinking_modes_integrated": 0
+      }
+    }
+  },
+  "performance_metrics": {}
+}
