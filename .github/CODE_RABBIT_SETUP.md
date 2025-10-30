@@ -67,21 +67,31 @@ Two workflow files have been added:
 
 ### Review Focus Areas
 
-**Main Repository:**
-- Code correctness and error handling
-- Performance for real-time systems
-- GPU memory management
-- Voice data security
-- API design consistency
-- Test coverage
+**OVIYA VISION VERIFICATION:**
+CodeRabbit now validates that all code correctly implements Oviya's core emotional intelligence principles:
 
-**Services:**
-- Service boundary design
-- Error handling and resilience
-- Real-time performance implications
-- Resource management (CPU/GPU/memory)
-- Security in distributed systems
-- Container and deployment practices
+#### **Therapeutic Psychology Principles:**
+- **Unconditional Positive Regard** (Carl Rogers) - Non-judgmental acceptance
+- **Secure Base** (Attachment Theory) - Providing safety and exploration support
+- **Vulnerability Reciprocity** - Matching user's self-disclosure level
+- **Bid for Connection** - Responding to emotional connection attempts
+- **Safety & Ethics** - Protecting users from harm
+
+#### **Global Wisdom Integration:**
+- **Cultural Balance** - Western psychology + global traditions (Ahimsa, Jeong, Ma, Logos, Lagom)
+- **Empathic Thinking Modes** - Deep cognitive empathy across multiple modes
+- **Relationship Memory** - Long-term emotional relationship tracking
+
+#### **Voice AI Specific:**
+- **Real-time Performance** - <500ms transcription, <4s end-to-end
+- **GPU Memory Management** - Proper CUDA resource handling
+- **Voice Data Privacy** - Encrypted, consent-based processing
+- **Emotional Continuity** - Maintaining emotional context across turns
+
+#### **Implementation Quality:**
+- **Error Resilience** - Graceful failure handling in emotional processing
+- **Performance Optimization** - Async patterns for real-time systems
+- **Memory Safety** - Preventing leaks in long conversation sessions
 
 ## 🔍 Custom Rules
 

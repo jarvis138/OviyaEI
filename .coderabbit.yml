@@ -50,27 +50,152 @@ path_filters:
     - "**/.git/**"
     - "**/migrations/**"
 
-# Custom review rules for Oviya EI
+# Custom review rules for Oviya EI - Emotional Intelligence Vision Verification
 custom_rules:
-  # Voice AI specific checks
+  # === OVIYA VISION VERIFICATION RULES ===
+
+  # 1. UNCONDITIONAL POSITIVE REGARD (Carl Rogers Principle)
+  - name: "Unconditional Regard Violation"
+    pattern: "I don't judge you|You're valid|That's okay|You're fine|It's not a big deal"
+    message: "❌ VIOLATION: Never use explicit validation phrases. Oviya must show unconditional regard through implicit acceptance, not explicit judgment. Use normalization instead (e.g., 'Many people struggle with that feeling')."
+    level: error
+
+  - name: "Judgmental Language"
+    pattern: "shouldn't|ought to|have to|need to|must|bad idea|wrong choice"
+    message: "❌ VIOLATION: Avoid prescriptive/judgmental language. Oviya should be non-directive and accepting of all choices and feelings."
+    level: error
+
+  # 2. SECURE BASE PRINCIPLES (Attachment Theory)
+  - name: "Missing Safe Haven Response"
+    pattern: "class.*System|def.*detect.*state"
+    message: "✅ CHECK: Ensure secure base system detects both 'safe_haven_needed' (comfort) and 'exploration_support_needed' (encouragement) states based on emotional cues."
+    level: info
+
+  - name: "Exploration Blocking"
+    pattern: "you can't|don't do that|be careful|watch out|danger"
+    message: "❌ VIOLATION: Avoid blocking exploration. Oviya should encourage safe exploration while acknowledging risks, not preventing action."
+    level: warning
+
+  # 3. VULNERABILITY RECIPROCITY
+  - name: "Unequal Vulnerability"
+    pattern: "I never feel|I've always|I don't get|That's weird|I can't relate"
+    message: "❌ VIOLATION: Never minimize user experience by claiming inability to relate. Use reciprocal vulnerability or normalization instead."
+    level: error
+
+  - name: "Forced Self-Disclosure"
+    pattern: "I feel|I experienced|When I|My story|Let me tell you"
+    message: "⚠️  CAUTION: Self-disclosure should only occur when user shows deep vulnerability markers. Ensure it's reciprocal, brief, and pivots focus back to user."
+    level: warning
+
+  # 4. BID FOR CONNECTION DETECTION
+  - name: "Missing Bid Response"
+    pattern: "def.*detect_bid|bid_type|micro_ack"
+    message: "✅ CHECK: Ensure bid detection system handles: excitement_share, distress_signal, seeking_validation, testing_presence, sharing_vulnerability."
+    level: info
+
+  - name: "Generic Acknowledgment"
+    pattern: "okay|uh-huh|right|got it|I see"
+    message: "❌ VIOLATION: Avoid generic acknowledgments. Use specific micro-affirmations that match the bid type (e.g., 'I'm here' for distress, 'Tell me more!' for excitement)."
+    level: error
+
+  # 5. CULTURAL WISDOM INTEGRATION
+  - name: "Western-Centric Only"
+    pattern: "therapy|counseling|psychologist|therapist"
+    message: "⚠️  CAUTION: While Western psychology is valid, ensure balance with global wisdom traditions (Ahimsa, Jeong, Ma, etc.) where appropriate."
+    level: info
+
+  - name: "Missing Cultural Context"
+    pattern: "global_soul|cultural|tradition|wisdom"
+    message: "✅ CHECK: Ensure global soul system integrates multiple cultural perspectives, not just Western psychology."
+    level: info
+
+  # 6. EMPATHIC THINKING MODES
+  - name: "Single-Mode Thinking"
+    pattern: "def.*generate.*response|class.*Engine"
+    message: "✅ CHECK: Ensure empathic thinking supports multiple modes: empathetic, dialectical, reflective, metacognitive, creative."
+    level: info
+
+  - name: "Surface-Level Empathy"
+    pattern: "I understand|I get it|That sucks|I'm sorry"
+    message: "⚠️  CAUTION: Avoid surface-level empathy statements. Use deep cognitive empathy that shows understanding of underlying emotional patterns."
+    level: warning
+
+  # 7. SAFETY & ETHICAL BOUNDARIES
+  - name: "Missing Safety Router"
+    pattern: "safety_router|SafetyRouter"
+    message: "✅ CHECK: Ensure all high-risk content routes through safety system with audit trails and locked fallback responses."
+    level: info
+
+  - name: "Unsafe Therapeutic Claims"
+    pattern: "I can help you heal|I'll fix you|You need help|You're depressed|You have anxiety"
+    message: "❌ VIOLATION: Never make diagnostic claims or promise therapeutic outcomes. Oviya is a companion, not a therapist."
+    level: error
+
+  # 8. RELATIONSHIP MEMORY & CONSISTENCY
+  - name: "Stateless Interaction"
+    pattern: "class.*Memory|relationship_memory|personality_store"
+    message: "✅ CHECK: Ensure long-term relationship memory tracks emotional patterns, attachment styles, and conversation history."
+    level: info
+
+  - name: "Inconsistent Persona"
+    pattern: "consistent_persona|personality_vector"
+    message: "✅ CHECK: Ensure personality consistency system maintains coherent behavior across conversations."
+    level: info
+
+  # 9. EMOTIONAL INTELLIGENCE VALIDATION
+  - name: "Limited Emotion Range"
+    pattern: "emotion.*taxonomy|emotion.*library"
+    message: "✅ CHECK: Ensure 49+ emotion taxonomy covers full emotional range, not just basic emotions."
+    level: info
+
+  - name: "Static Emotional Response"
+    pattern: "emotion.*transition|emotion.*blend"
+    message: "✅ CHECK: Ensure smooth emotion transitions and context-appropriate emotional responses."
+    level: info
+
+  # 10. VOICE AI SPECIFIC RULES
   - name: "GPU Memory Management"
     pattern: "torch\.cuda"
-    message: "Ensure proper GPU memory management with torch.cuda.empty_cache() or context managers"
+    message: "Ensure proper GPU memory management with torch.cuda.empty_cache() or context managers for real-time voice processing"
     level: warning
 
   - name: "Async Error Handling"
     pattern: "async def.*websocket"
-    message: "WebSocket handlers should have proper exception handling for connection drops"
+    message: "WebSocket handlers should have proper exception handling for connection drops in real-time voice conversations"
     level: warning
 
   - name: "Model Loading Validation"
     pattern: "load.*model|\.load\("
-    message: "Add validation after model loading to ensure successful load"
+    message: "Add validation after model loading to ensure successful load for voice synthesis models"
     level: info
 
-  - name: "Security Headers"
-    pattern: "FastAPI|flask|django"
-    message: "Ensure security headers are set for API endpoints handling sensitive voice data"
+  - name: "Voice Data Privacy"
+    pattern: "audio.*record|microphone|voice.*data"
+    message: "Ensure voice data is encrypted, not stored permanently, and user consent is obtained for processing"
+    level: warning
+
+  # === IMPLEMENTATION QUALITY RULES ===
+
+  # Performance for Real-Time Systems
+  - name: "Blocking Operations"
+    pattern: "time\.sleep|while True|input\("
+    message: "Avoid blocking operations in real-time voice processing pipeline - use async/await patterns"
+    level: error
+
+  - name: "Memory Leaks"
+    pattern: "global.*=|self\..*=.*\[\]|append.*without.*limit"
+    message: "Prevent memory leaks in long-running voice conversation sessions"
+    level: warning
+
+  # Error Resilience
+  - name: "Silent Failures"
+    pattern: "except.*:.*pass|except.*Exception|bare.*except"
+    message: "Never silently ignore errors in emotional processing - log and handle gracefully"
+    level: error
+
+  - name: "Hardcoded Values"
+    pattern: "[0-9]+\.[0-9]+|threshold.*=.*[0-9]"
+    message: "Avoid hardcoded thresholds in emotional detection - use configurable parameters"
     level: warning
 
 # Performance thresholds

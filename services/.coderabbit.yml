@@ -15,8 +15,91 @@ review:
   # Request changes if critical issues found
   request_changes_workflow: true
 
-# Service-specific review rules
+# Service-specific review rules - Oviya Vision Implementation in Microservices
 custom_rules:
+  # === OVIYA VISION IMPLEMENTATION IN SERVICES ===
+
+  # 1. UNCONDITIONAL REGARD IN SERVICE APIs
+  - name: "Service-Level Judgment"
+    pattern: "invalid.*request|bad.*input|error.*user|reject.*request"
+    message: "❌ VIOLATION: Services should handle invalid inputs gracefully without judgment. Use 'processing_error' or 'validation_failed' instead of blaming language."
+    level: error
+
+  - name: "Emotional Context Loss"
+    pattern: "def.*process.*audio|def.*analyze.*voice|def.*synthesize"
+    message: "✅ CHECK: Ensure services preserve emotional context (prosody, bid types, vulnerability markers) across API boundaries."
+    level: info
+
+  # 2. SECURE BASE IN SERVICE DESIGN
+  - name: "Blocking Service Calls"
+    pattern: "requests\.get|httpx\.get|\.post\("
+    message: "⚠️  CAUTION: Synchronous service calls can block real-time voice processing. Consider async patterns or circuit breakers."
+    level: warning
+
+  - name: "Service Failure Impact"
+    pattern: "except.*Exception|try:|catch"
+    message: "✅ CHECK: Ensure service failures don't break emotional continuity - implement graceful degradation for voice services."
+    level: info
+
+  # 3. VULNERABILITY RECIPROCITY IN APIs
+  - name: "Data Exposure Risk"
+    pattern: "return.*emotion|return.*vulnerability|return.*bid"
+    message: "⚠️  CAUTION: Ensure sensitive emotional data is not exposed in service responses. Use appropriate data structures and privacy measures."
+    level: warning
+
+  # 4. BID FOR CONNECTION IN REAL-TIME SERVICES
+  - name: "Missing Real-time Context"
+    pattern: "websocket|async def|stream"
+    message: "✅ CHECK: Ensure real-time services (WebSocket, streaming) maintain conversation context for bid detection and micro-affirmations."
+    level: info
+
+  - name: "Stateless Real-time Service"
+    pattern: "class.*Service|def.*__init__"
+    message: "✅ CHECK: Real-time voice services should maintain session state for emotional continuity across turns."
+    level: info
+
+  # 5. CULTURAL WISDOM IN SERVICE LOGIC
+  - name: "Western-Only Emotion Processing"
+    pattern: "emotion.*detect|sentiment.*analysis|emotion.*map"
+    message: "✅ CHECK: Ensure emotion processing services integrate global cultural contexts, not just Western emotion models."
+    level: info
+
+  # 6. EMPATHIC THINKING IN SERVICE ARCHITECTURE
+  - name: "Single-Service Empathy"
+    pattern: "orchestrator|coordinator|router"
+    message: "✅ CHECK: Ensure orchestrator services can coordinate multiple empathy modes (empathetic, dialectical, reflective, etc.) across services."
+    level: info
+
+  # 7. SAFETY ROUTING IN DISTRIBUTED SYSTEMS
+  - name: "Distributed Safety Gaps"
+    pattern: "safety|router|audit"
+    message: "✅ CHECK: Ensure safety routing works across service boundaries with distributed audit trails and consistent fallback responses."
+    level: info
+
+  - name: "Service Isolation Violations"
+    pattern: "global.*state|shared.*memory|singleton"
+    message: "⚠️  CAUTION: Avoid shared state between services that could compromise emotional safety boundaries."
+    level: warning
+
+  # 8. RELATIONSHIP MEMORY IN MICROSERVICES
+  - name: "Stateless Services"
+    pattern: "docker.*run|kubernetes|service"
+    message: "⚠️  CAUTION: Services handling emotional relationships should have access to persistent session/memory stores."
+    level: warning
+
+  # 9. EMOTIONAL INTELLIGENCE IN SERVICE APIs
+  - name: "Limited Emotion API"
+    pattern: "/api/.*/emotion|/v1/emotion"
+    message: "✅ CHECK: Ensure emotion APIs support full 49+ emotion taxonomy, not just basic sentiment analysis."
+    level: info
+
+  - name: "Static Emotion Services"
+    pattern: "emotion.*service|emotion.*api"
+    message: "✅ CHECK: Emotion services should support dynamic emotion transitions and context-aware responses."
+    level: info
+
+  # === SERVICE ARCHITECTURE RULES ===
+
   # Docker and containerization
   - name: "Docker Security"
     pattern: "FROM.*:"
@@ -50,6 +133,22 @@ custom_rules:
   - name: "Structured Logging"
     pattern: "print\(|logging\."
     message: "Use structured logging instead of print statements in production services"
+    level: info
+
+  # Voice AI Service Specific
+  - name: "GPU Resource Management"
+    pattern: "torch\.cuda|nvidia|gpu"
+    message: "Ensure proper GPU resource allocation and cleanup in voice AI services"
+    level: warning
+
+  - name: "Audio Stream Handling"
+    pattern: "stream|audio|voice|websocket"
+    message: "Ensure audio streams are properly managed with error handling and cleanup"
+    level: warning
+
+  - name: "Real-time Latency"
+    pattern: "async|await|real.*time|latency"
+    message: "Ensure real-time voice services maintain <500ms transcription and <4s end-to-end latency"
     level: info
 
 # Path filters specific to services
