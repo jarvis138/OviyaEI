@@ -44,6 +44,14 @@ oviya/
 │   ├── processed/                # Processed training data
 │   └── scripts/                  # Processing scripts
 │
+├── mcp-ecosystem/               # Model Context Protocol ecosystem
+│   ├── monitoring/               # System monitoring & analytics
+│   ├── servers/                  # MCP server implementations
+│   │   ├── tier1/               # Core thinking & reasoning
+│   │   ├── tier2/               # Data & persistence services
+│   │   └── tier3/               # External integrations
+│   └── config/                   # MCP configuration files
+│
 ├── shared/                       # Infrastructure & deployment
 │   ├── docker/                   # Docker configurations
 │   ├── k8s/                      # Kubernetes manifests
@@ -52,6 +60,7 @@ oviya/
 ├── tests/                        # Integration tests
 ├── requirements.txt              # Python dependencies
 ├── docker-compose.yml            # Development orchestration
+├── .coderabbit.yml              # CodeRabbit AI review configuration
 └── README.md                     # This file
 ```
 
@@ -151,6 +160,72 @@ CSM_STREAM_URL=http://localhost:19517/generate/stream
 WHISPERX_URL=http://localhost:1111
 ```
 
+## 🤖 CodeRabbit AI Code Reviews
+
+Oviya uses CodeRabbit for AI-powered code reviews that validate implementation against our therapeutic AI vision. Every pull request is automatically reviewed for:
+
+### Vision Verification Rules
+- **Unconditional Positive Regard**: Ensures non-judgmental, accepting language patterns
+- **Secure Base Principles**: Validates attachment theory-based emotional responses
+- **Vulnerability Reciprocity**: Checks appropriate reciprocal self-disclosure
+- **Bid for Connection**: Verifies micro-affirmation responses to emotional bids
+- **Global Wisdom Integration**: Ensures balance between Western psychology and global traditions
+- **Safety & Ethics**: Validates locked fallback responses and audit trails
+
+### Technical Excellence
+- **Real-time Performance**: <500ms transcription, <4s end-to-end latency
+- **GPU Memory Management**: Proper CUDA resource handling
+- **Voice Data Privacy**: Encrypted processing with consent validation
+- **Emotional Continuity**: Context preservation across conversation turns
+
+### Setup
+```bash
+# Add to GitHub repository secrets
+OPENAI_API_KEY=your_openai_api_key_here
+```
+
+**Documentation**: [CodeRabbit Setup Guide](.github/CODE_RABBIT_SETUP.md)
+
+## 🔄 MCP Ecosystem
+
+Oviya includes a comprehensive Model Context Protocol (MCP) ecosystem for enhanced AI capabilities and system integration.
+
+### Architecture Tiers
+
+#### **Tier 1: Core Thinking & Reasoning**
+- **Thinking Server**: Advanced cognitive empathy modes
+- **Personality Engine**: Dynamic personality adaptation
+- **Emotional Intelligence**: Deep emotional pattern recognition
+
+#### **Tier 2: Data & Persistence**
+- **PostgreSQL Server**: Structured data and conversation history
+- **Redis Server**: High-performance caching and session state
+- **Vector Storage**: Semantic search and memory retrieval
+
+#### **Tier 3: External Integrations**
+- **WhatsApp Server**: Social media integration
+- **Stripe Server**: Payment processing and monetization
+- **Analytics Server**: Usage metrics and performance monitoring
+
+### Key Features
+- **Modular Architecture**: Independent services with clear interfaces
+- **Real-time Communication**: WebSocket-based inter-service messaging
+- **Monitoring & Observability**: Comprehensive logging and metrics collection
+- **Scalable Deployment**: Docker Compose and Kubernetes support
+
+### Quick Start MCP
+```bash
+# Start the complete MCP ecosystem
+cd mcp-ecosystem
+docker-compose up -d
+
+# Or start individual services
+cd mcp-ecosystem/servers/tier2/postgres
+docker-compose up -d
+```
+
+**Documentation**: [MCP Ecosystem Guide](mcp-ecosystem/README.md)
+
 ## 🧪 Testing
 
 ```bash
@@ -199,6 +274,9 @@ See individual component licenses.
 - [Architecture Documentation](production/README.md)
 - [API Reference](production/websocket_server.py)
 - [Client Integration](clients/README.md)
+- [CodeRabbit Setup Guide](.github/CODE_RABBIT_SETUP.md)
+- [MCP Ecosystem Guide](mcp-ecosystem/README.md)
+- [MCP Configuration](mcp-ecosystem/config/oviya-mcp-config.json)
 
 
 
