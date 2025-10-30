@@ -7,6 +7,7 @@ import { useAudioPlayer } from '@/hooks/useAudioPlayer'
 import { EmotionSelector } from '@/components/EmotionSelector'
 import { ConversationHistory } from '@/components/ConversationHistory'
 import { ConnectionStatus } from '@/components/ConnectionStatus'
+import { ContemplationIndicator } from '@/components/ContemplationIndicator'
 import { toast } from 'react-hot-toast'
 
 export const VoiceChat: React.FC = () => {
@@ -21,6 +22,7 @@ export const VoiceChat: React.FC = () => {
     sessionId,
     messages,
     isAiSpeaking,
+    contemplationIndicator,
     connect,
     disconnect,
     sendMessage,
@@ -97,6 +99,19 @@ export const VoiceChat: React.FC = () => {
   
   return (
     <div className="max-w-4xl mx-auto">
+      {/* Strategic Silence Contemplation Indicator */}
+      <AnimatePresence>
+        {contemplationIndicator && (
+          <ContemplationIndicator
+            emotion={contemplationIndicator.emotion}
+            duration={contemplationIndicator.duration_ms}
+            maWeight={contemplationIndicator.ma_weight}
+            maDescription={contemplationIndicator.ma_description}
+            indicatorStyle={contemplationIndicator.indicator_style as 'ma_weighted' | 'balanced'}
+          />
+        )}
+      </AnimatePresence>
+
       {/* Connection Status */}
       <ConnectionStatus 
         isConnected={isConnected} 

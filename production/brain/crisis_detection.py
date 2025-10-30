@@ -123,6 +123,12 @@ class CrisisDetectionSystem:
             r'final (time|straw|attempt)',
             r'never (going to|want to) (see|feel|live)',
             r'better off (dead|gone)',
+            r'want to end it',
+            r'end it all',
+            r'kill myself',
+            r'take my life',
+            r'don\'t want to live',
+            r'not worth living',
         ]
 
         for pattern in escalation_patterns:

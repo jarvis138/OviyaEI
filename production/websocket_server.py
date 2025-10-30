@@ -91,6 +91,8 @@ from faster_whisper import WhisperModel
 from .brain.mcp_memory_integration import OviyaMemorySystem
 from .brain.crisis_detection import CrisisDetectionSystem
 from .brain.empathic_thinking import EmpathicThinkingEngine
+from .brain.emotional_reciprocity import reciprocal_empathy_integrator
+from .voice.strategic_silence import strategic_silence_manager, emotional_pacing_controller
 
 import time
 
@@ -499,8 +501,65 @@ class ConversationSession:
             user_text, personality_vector, emotion_context
         )
 
-        # Use empathic response instead of basic brain response
-        prosodic_text = empathic_response["response"]
+        # 🆕 STRATEGIC SILENCE INTEGRATION: Apply therapeutic silence before response
+        ma_weight = personality_vector.get("Ma", 0.3)
+
+        # Build conversation context for adaptive silence
+        conversation_context = {
+            "depth": len(self._memory_triples),
+            "emotion_intensity": emotion_context.get("intensity", 0.7),
+            "vulnerability_indicators": len([msg for msg in self._memory_triples[-5:]
+                                          if any(word in msg.get('text', '').lower()
+                                                for word in ['scared', 'lost', 'hurt', 'ashamed', 'broken'])]),
+            "recent_silence_patterns": []  # Could track from previous interactions
+        }
+
+        # Apply pre-response therapeutic silence
+        silence_metadata = await strategic_silence_manager.apply_therapeutic_silence(
+            user_emotion=user_emotion,
+            emotion_intensity=emotion_context.get("intensity", 0.7),
+            ma_weight=ma_weight,
+            websocket=websocket,
+            silence_type="pre_response",
+            conversation_context=conversation_context
+        )
+
+        # 🆕 EMOTIONAL RECIPROCITY INTEGRATION: Add Oviya's internal emotional state
+        # Create emotion embedding (simplified - would use real emotion detector)
+        emotion_embed = torch.randn(64)  # Placeholder - should come from emotion detector
+        oviya_personality_tensor = torch.tensor(list(personality_vector.values()))
+
+        # Enhance response with reciprocal empathy
+        enhanced_response_text, reciprocity_metadata = await reciprocal_empathy_integrator.enhance_response_with_reciprocity(
+            response_text=empathic_response["response"],
+            user_emotion_embed=emotion_embed,
+            oviya_personality=oviya_personality_tensor,
+            conversation_context={
+                "emotion": user_emotion,
+                "depth": len(self._memory_triples),
+                "emotion_intensity": emotion_context.get("intensity", 0.7)
+            }
+        )
+
+        # 🆕 THERAPEUTIC PACING INTEGRATION: Add pause markers and voice modulation
+        # Apply therapeutic pacing to the enhanced response
+        response_with_pauses = emotional_pacing_controller.add_therapeutic_pauses(
+            enhanced_response_text,
+            ma_weight=ma_weight,
+            emotion=user_emotion,
+            emotion_intensity=emotion_context.get("intensity", 0.7)
+        )
+
+        # Get Ma-weighted voice modulation parameters
+        voice_modulation = emotional_pacing_controller.apply_ma_voice_modulation(
+            ma_weight=ma_weight,
+            emotion=user_emotion
+        )
+
+        # Apply to prosody controller (integrate with existing prosody system)
+        prosodic_text = response_with_pauses  # Start with pause-enhanced text
+
+        # TODO: Integrate voice_modulation with CSM-1B prosody controller
         emotion = user_emotion or "neutral"
 
         # Stream LLM tokens while starting TTS ASAP
@@ -606,6 +665,29 @@ class ConversationSession:
             'text': prosodic_text,
             'emotion': oviya_emotion_params.get('style_token', emotion)
         })
+
+        # 🆕 POST-RESPONSE THERAPEUTIC SILENCE: Apply contemplative silence after response
+        # This creates the "sitting with you" feeling that makes Oviya truly present
+        post_silence_metadata = await strategic_silence_manager.apply_therapeutic_silence(
+            user_emotion=user_emotion,
+            emotion_intensity=emotion_context.get("intensity", 0.7),
+            ma_weight=ma_weight,
+            websocket=websocket,
+            silence_type="post_response",
+            conversation_context=conversation_context
+        )
+
+        # Log therapeutic silence events for analytics and improvement
+        silence_analytics = {
+            "pre_response_silence": silence_metadata,
+            "post_response_silence": post_silence_metadata,
+            "total_silence_duration": silence_metadata["final_duration"] + post_silence_metadata["final_duration"],
+            "ma_weight_used": ma_weight,
+            "emotion": user_emotion,
+            "conversation_depth": len(self._memory_triples),
+            "timestamp": time.time()
+        }
+        # TODO: Send to analytics/logging system
 
     async def cancel_tts_stream(self):
         self._tts_cancel_requested = True

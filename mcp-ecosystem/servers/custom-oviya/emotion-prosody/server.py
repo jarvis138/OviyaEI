@@ -14,9 +14,10 @@ from datetime import datetime
 import librosa
 import torch
 
-# Add project paths
+# Add project paths for standalone execution
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))))
-sys.path.insert(0, project_root)
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 
 class OviyaEmotionProsodyServer:
     """

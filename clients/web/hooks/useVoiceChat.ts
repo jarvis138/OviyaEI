@@ -11,11 +11,21 @@ interface Message {
   emotion?: string
 }
 
+interface ContemplationIndicator {
+  emotion: string
+  duration_ms: number
+  ma_weight: number
+  ma_description: string
+  indicator_style: string
+  text: string
+}
+
 interface VoiceChatState {
   isConnected: boolean
   sessionId: string | null
   messages: Message[]
   isAiSpeaking: boolean
+  contemplationIndicator: ContemplationIndicator | null
   connect: () => void
   disconnect: () => void
   sendMessage: (data: any) => Promise<void>
@@ -27,6 +37,7 @@ export const useVoiceChat = (): VoiceChatState => {
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
   const [isAiSpeaking, setIsAiSpeaking] = useState(false)
+  const [contemplationIndicator, setContemplationIndicator] = useState<ContemplationIndicator | null>(null)
   
   const socketRef = useRef<Socket | null>(null)
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
@@ -96,6 +107,17 @@ export const useVoiceChat = (): VoiceChatState => {
     socket.on('error', (error) => {
       console.error('Socket error:', error)
       toast.error(error.message || 'An error occurred')
+    })
+
+    // Strategic silence and contemplation events
+    socket.on('contemplation_indicator', (data: ContemplationIndicator) => {
+      console.log('Contemplation indicator received:', data)
+      setContemplationIndicator(data)
+
+      // Auto-hide after duration
+      setTimeout(() => {
+        setContemplationIndicator(null)
+      }, data.duration_ms + 500) // Extra 500ms for fade out
     })
   }
   
@@ -178,6 +200,7 @@ export const useVoiceChat = (): VoiceChatState => {
     sessionId,
     messages,
     isAiSpeaking,
+    contemplationIndicator,
     connect,
     disconnect,
     sendMessage,
