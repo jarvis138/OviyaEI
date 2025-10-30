@@ -1,0 +1,21 @@
+{
+  "relationship_level": 0.7,
+  "preferred_emotions": [
+    "calm_supportive",
+    "joyful_excited"
+  ],
+  "interaction_style": "conversational",
+  "user_traits": [
+    "creative",
+    "analytical"
+  ],
+  "conversation_count": 5,
+  "user_id": "test_user_123",
+  "last_updated": "2025-10-27T04:00:54.159211",
+  "conversation_history": [],
+  "emotion_preferences": {},
+  "topics_discussed": [],
+  "preferences": {},
+  "total_interactions": 0,
+  "metadata": {}
+}

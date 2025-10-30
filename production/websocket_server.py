@@ -86,6 +86,12 @@ from core.voice.acoustic_emotion_detector import AcousticEmotionDetector
 from .brain.personality_store import PersonalityStore
 from .config.service_urls import OLLAMA_URL, CSM_URL
 from faster_whisper import WhisperModel
+
+# Import MCP systems
+from .brain.mcp_memory_integration import OviyaMemorySystem
+from .brain.crisis_detection import CrisisDetectionSystem
+from .brain.empathic_thinking import EmpathicThinkingEngine
+
 import time
 
 # Prefer local adapter, fallback to WebRTC implementation
@@ -256,13 +262,13 @@ class ConversationSession:
     
     def __init__(self, user_id: str):
         self.user_id = user_id
-        
+
         # Use global shared models (much faster)
         voice_input, emotion_detector, acoustic_emotion = get_global_models()
         self.voice_input = voice_input
         self.emotion_detector = emotion_detector
         self.acoustic_emotion = acoustic_emotion
-        
+
         # Create per-session instances
         self.brain = OviyaBrain(ollama_url=OLLAMA_URL)
         self.emotion_controller = EmotionController()
@@ -270,10 +276,16 @@ class ConversationSession:
         self.csm_streaming = CSM1BClient(use_local_model=False, remote_url=CSM_URL)
         self.stt = StreamingSTT()
         self.is_generating = False
+
         # Psych systems
         self.secure_base = SecureBaseSystem()
         self.bids = BidResponseSystem()
-        
+
+        # Initialize MCP systems for emotional intelligence
+        self.memory_system = OviyaMemorySystem()
+        self.crisis_detector = CrisisDetectionSystem()
+        self.empathy_engine = EmpathicThinkingEngine()
+
         # Load user personality
         self.personality = personality_store.load_personality(user_id)
         if self.personality:
@@ -281,8 +293,8 @@ class ConversationSession:
             # Inject personality context into brain
             context = personality_store.get_conversation_summary(user_id, last_n=5)
             self.brain.context = context
-        
-        print(f"✅ Conversation session initialized for {user_id}")
+
+        print(f"✅ Conversation session initialized for {user_id} with MCP emotional intelligence")
 
         # Streaming state
         self._tts_stream_task: Optional[asyncio.Task] = None
@@ -339,6 +351,41 @@ class ConversationSession:
             return arr
         except Exception:
             return None
+
+    async def _compute_personality_vector(self, user_text: str, user_emotion: str) -> Dict[str, float]:
+        """
+        Compute the 5-pillar personality vector for Oviya's response
+        This is a simplified version - would integrate with full personality system
+        """
+        # Base personality vector (could be loaded from personality store)
+        base_vector = {
+            "Ma": 0.3,      # Innovation/Creativity
+            "Ahimsa": 0.4,  # Non-violence/Safety
+            "Jeong": 0.15,  # Deep connection/Empathy
+            "Logos": 0.1,   # Reason/Logic
+            "Lagom": 0.05   # Balance/Appropriateness
+        }
+
+        # Adjust based on user emotion (simplified adaptation)
+        emotion_adjustments = {
+            "sad": {"Jeong": +0.1, "Ahimsa": +0.1, "Lagom": +0.05},
+            "anxious": {"Ahimsa": +0.15, "Lagom": +0.1, "Logos": +0.05},
+            "angry": {"Ahimsa": +0.2, "Jeong": +0.1, "Lagom": +0.05},
+            "joyful": {"Ma": +0.1, "Jeong": +0.1, "Lagom": +0.05},
+            "confused": {"Logos": +0.15, "Jeong": +0.1, "Ahimsa": +0.05}
+        }
+
+        if user_emotion in emotion_adjustments:
+            for pillar, adjustment in emotion_adjustments[user_emotion].items():
+                base_vector[pillar] = min(1.0, max(0.0, base_vector[pillar] + adjustment))
+
+        # Normalize to ensure sum <= 1 (representing energy distribution)
+        total = sum(base_vector.values())
+        if total > 1.0:
+            for pillar in base_vector:
+                base_vector[pillar] /= total
+
+        return base_vector
     
     async def generate_response(self, user_text: str, user_emotion: str) -> Dict:
         """
@@ -408,37 +455,94 @@ class ConversationSession:
 
     async def generate_response_streaming(self, websocket: WebSocket, user_text: str, user_emotion: str):
         """
-        Stream TTS audio chunks as they are generated.
+        Stream TTS audio chunks as they are generated with MCP emotional intelligence.
         Sends 'audio_chunk' messages and a terminal 'response' with text/emotion.
         """
         await self.cancel_tts_stream()
 
+        # MCP INTEGRATION: Crisis detection first (SAFETY FIRST)
+        crisis_assessment = await self.crisis_detector.assess_crisis_risk(
+            user_text, [msg.get('text', '') for msg in self._memory_triples[-10:]]
+        )
+
+        if crisis_assessment["escalation_needed"]:
+            # Handle crisis with immediate intervention
+            emergency_resources = await self.crisis_detector.get_emergency_resources()
+            crisis_response = crisis_assessment["immediate_response"]
+
+            # Send crisis intervention immediately
+            await websocket.send_json({
+                'type': 'crisis_intervention',
+                'text': crisis_response,
+                'emergency_resources': emergency_resources,
+                'severity': crisis_assessment["risk_level"]
+            })
+            return
+
+        # MCP INTEGRATION: Retrieve relevant memories for context
+        relevant_memories = await self.memory_system.retrieve_relevant_memories(
+            self.user_id, user_text, limit=5
+        )
+
+        # MCP INTEGRATION: Compute current personality vector
+        personality_vector = await self._compute_personality_vector(user_text, user_emotion)
+
+        # MCP INTEGRATION: Generate deep empathic response
+        emotion_context = {
+            "emotion": user_emotion,
+            "intensity": 0.7,  # Could be enhanced with acoustic analysis
+            "patterns": relevant_memories.get("conversation_history", []),
+            "conflicts": []  # Could be detected from conversation flow
+        }
+
+        empathic_response = await self.empathy_engine.generate_empathic_response(
+            user_text, personality_vector, emotion_context
+        )
+
+        # Use empathic response instead of basic brain response
+        prosodic_text = empathic_response["response"]
+        emotion = user_emotion or "neutral"
+
         # Stream LLM tokens while starting TTS ASAP
         start_time = time.time()
-        prosodic_text = ""
-        emotion = user_emotion or "neutral"
         assembled = []
         token_count = 0
-        async for token in self.brain.think_streaming(user_text, user_emotion, conversation_history=None):
-            assembled.append(token)
-            token_count += 1
-            # Kick off when first sentence boundary appears
-            if not prosodic_text and any(p in ''.join(assembled) for p in ['.', '!', '?']):
-                prosodic_text = ''.join(assembled)
-                break
-            # Token-bucket early trigger
-            if not prosodic_text and token_count >= 20:
-                prosodic_text = ''.join(assembled)
-                break
+
+        # For MCP-enhanced responses, we generate the full text first
+        # (could be optimized for streaming later)
         if not prosodic_text:
-            # Fallback to full think if no early boundary
+            # Fallback to basic brain response if MCP fails
+            async for token in self.brain.think_streaming(user_text, user_emotion, conversation_history=None):
+                assembled.append(token)
+                token_count += 1
+                # Early trigger logic
+                if not prosodic_text and any(p in ''.join(assembled) for p in ['.', '!', '?']):
+                    prosodic_text = ''.join(assembled)
+                    break
+                if not prosodic_text and token_count >= 20:
+                    prosodic_text = ''.join(assembled)
+                    break
+
+        if not prosodic_text:
+            # Final fallback
             brain_resp_full = self.brain.think(user_text, user_emotion)
             prosodic_text = brain_resp_full.get('prosodic_text') or brain_resp_full.get('text', '')
             emotion = brain_resp_full.get('emotion', emotion)
-        intensity = brain_resp_full.get('intensity', 0.7) if 'brain_resp_full' in locals() else 0.7
+
+        intensity = 0.7  # Could be derived from personality vector
         oviya_emotion_params = self.emotion_controller.map_emotion(
             emotion, intensity
         )
+
+        # MCP INTEGRATION: Store conversation in memory system
+        await self.memory_system.store_conversation_memory(self.user_id, {
+            "user_input": user_text,
+            "response": prosodic_text,
+            "timestamp": time.time(),
+            "emotion": emotion,
+            "personality_vector": personality_vector,
+            "session_id": f"session_{int(time.time())}"
+        })
 
         # Store memory triple
         self._add_memory_triple(user_text, prosodic_text)
