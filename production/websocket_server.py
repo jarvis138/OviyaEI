@@ -21,6 +21,15 @@ import sys
 # Add parent directory to path to find core modules
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+# Session management with fail-safe
+try:
+    from .session_manager import SessionManager
+    session_mgr = SessionManager(ttl_s=300)  # 5 minute sessions
+    SESSION_MANAGER_AVAILABLE = True
+except ImportError:
+    session_mgr = None
+    SESSION_MANAGER_AVAILABLE = False
+
 # Optional JWT auth (fallback to allow if PyJWT missing or secret unset)
 try:
     import jwt  # PyJWT
@@ -980,9 +989,19 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str = "anonymous"):
     await websocket.accept()
     
     print(f"🔌 WebSocket connected: {user_id}")
-    
+
     # Create conversation session
     session = ConversationSession(user_id)
+
+    # Initialize session state tracking
+    session_state = None
+    if SESSION_MANAGER_AVAILABLE and user_id != "anonymous":
+        try:
+            session_state = session_mgr.get_or_create(user_id)
+            print(f"📊 Session state initialized: {user_id}")
+        except Exception as e:
+            print(f"⚠️ Session management failed: {e}")
+            session_state = None
     
     try:
         # Heartbeat task to keep tunnel/NAT alive
@@ -1156,6 +1175,13 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str = "anonymous"):
                         'text': partial,
                         'partial': True
                     })
+
+                    # Update session activity
+                    if SESSION_MANAGER_AVAILABLE and session_state and user_id != "anonymous":
+                        try:
+                            session_mgr.update_activity(user_id)
+                        except Exception:
+                            pass  # Fail silently
                     # If sentence boundary or token-bucket threshold, trigger early TTS
                     if any(p in partial for p in ['.', '!', '?']) and not session.is_generating:
                         # Bid detection for micro-ack (backchannel is injected in brain already)
@@ -1290,6 +1316,13 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str = "anonymous"):
             # Note: Batched streamer handles global cleanup automatically
         except Exception:
             pass
+
+        # Cleanup session state
+        if SESSION_MANAGER_AVAILABLE and user_id != "anonymous":
+            try:
+                session_mgr.cleanup_expired_sessions()
+            except Exception:
+                pass  # Fail silently
 
 
 @app.get("/health")

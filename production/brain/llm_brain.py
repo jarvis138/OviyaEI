@@ -30,6 +30,15 @@ from .empathic_thinking import EmpathicThinkingEngine
 from .mcp_memory_integration import OviyaMemorySystem
 from ..utils.pii_redaction import redact
 from ..utils.emotion_monitor import EmotionDistributionMonitor
+
+# Optimization hooks with fail-safe
+try:
+    from ..optimizations import ProsodyTemplateCache
+    prosody_cache = ProsodyTemplateCache(max_items=128)
+    OPTIMIZATIONS_AVAILABLE = True
+except ImportError:
+    prosody_cache = None
+    OPTIMIZATIONS_AVAILABLE = False
 from .personality_store import PersonalityStore
 from .empathy_fusion_head import EmpathyFusionHead
 # Try to import advanced therapeutic systems with graceful fallback
@@ -170,13 +179,23 @@ class ProsodyMarkup:
     def add_prosodic_markup(cls, text: str, emotion: str, intensity: float = 0.5) -> str:
         """
         Add prosodic markers to text based on emotion with contextual memory.
-        
+
         Includes:
         - Micro-pause prediction based on phrase structure
         - Contextual consistency across turns
         - Natural breath placement
+        - Optimization caching for performance
         """
-        
+
+        # Check optimization cache first
+        if OPTIMIZATIONS_AVAILABLE and prosody_cache:
+            cache_key = f"{text[:50]}_{emotion}_{intensity:.1f}"
+            cached_result = prosody_cache.get(cache_key)
+            if cached_result:
+                # Update turn count for memory tracking but skip computation
+                cls._prosody_memory["turn_count"] += 1
+                return cached_result
+
         # Update turn count
         cls._prosody_memory["turn_count"] += 1
         
@@ -240,7 +259,12 @@ class ProsodyMarkup:
         cls._prosody_memory["recent_pauses"].append(pause_count)
         if len(cls._prosody_memory["recent_pauses"]) > 5:
             cls._prosody_memory["recent_pauses"].pop(0)
-        
+
+        # Cache the result for future use
+        if OPTIMIZATIONS_AVAILABLE and prosody_cache:
+            cache_key = f"{text[:50]}_{emotion}_{intensity:.1f}"
+            prosody_cache.put(cache_key, marked_text)
+
         return marked_text
     
     @staticmethod

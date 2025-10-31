@@ -24,6 +24,12 @@ except ImportError:
     pass
 
 try:
+    from .emotion_detector_alternative import AcousticEmotionDetector as AlternativeAcousticEmotionDetector
+    register_component("acoustic_emotion_alternative", lambda: AlternativeAcousticEmotionDetector())
+except ImportError:
+    pass
+
+try:
     from .whisper_client import WhisperTurboClient
     register_component("whisper_turbo", lambda: WhisperTurboClient())
 except ImportError:

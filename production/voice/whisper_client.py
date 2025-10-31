@@ -3,12 +3,27 @@ from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, pipeline
 import numpy as np
 from typing import Optional, AsyncGenerator
 
+# Import WhisperX configuration
+try:
+    from ..config.whisperx_config import WHISPERX_CONFIG
+except ImportError:
+    WHISPERX_CONFIG = {
+        "batch_size": 8,
+        "language": "en",
+        "compute_type": "float16"
+    }
+
 
 class WhisperTurboClient:
     def __init__(self, device: str = "auto", model_id: str = "openai/whisper-large-v3-turbo", chunk_len_s: int = 30, batch_size: int = 8):
         self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
         self.torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
         self.model_id = model_id
+
+        # Use configuration values with fallbacks
+        self.batch_size = batch_size or WHISPERX_CONFIG.get("batch_size", 8)
+        self.language = WHISPERX_CONFIG.get("language", "en")
+        self.compute_type = WHISPERX_CONFIG.get("compute_type", "float16")
 
         self.model = AutoModelForSpeechSeq2Seq.from_pretrained(
             self.model_id,
