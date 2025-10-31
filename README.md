@@ -123,6 +123,7 @@ Oviya EI is a revolutionary therapeutic AI companion that combines:
 - CUDA-compatible GPU (recommended for voice synthesis)
 - 16GB+ RAM
 - Ollama with Llama 3.2:3B model
+- HuggingFace account with API token
 
 ### **Installation**
 
@@ -131,12 +132,28 @@ Oviya EI is a revolutionary therapeutic AI companion that combines:
 git clone https://github.com/your-repo/oviya-ei.git
 cd oviya-ei
 
-# Install dependencies
+# Set up environment variables (REQUIRED)
 cd production
+./setup_environment.sh
+# Edit .env file with your HuggingFace token and secret key
+
+# Install dependencies
 pip install -r requirements.txt
 
 # Initialize models
 python setup_complete_system.sh
+```
+
+### **Environment Setup**
+```bash
+# Required: HuggingFace API Token
+export HUGGINGFACE_TOKEN="hf_your_token_here"
+
+# Required: Application Secret Key
+export OVIYA_SECRET="your_secure_secret_key"
+
+# Optional: Enable cloud GPU
+export CLOUD_GPU_AVAILABLE=true
 ```
 
 ### **Basic Usage**
