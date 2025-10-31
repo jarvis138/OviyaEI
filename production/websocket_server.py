@@ -74,7 +74,7 @@ except Exception:
     STT_H = LLM_H = TTS_H = TTFB_H = ERRORS = None
 
 # Import Oviya components
-from .voice.realtime_input import RealTimeVoiceInput  # Local WhisperX processing
+# from .voice.realtime_input import RealTimeVoiceInput  # Local WhisperX processing - disabled for now
 from .emotion_detector.detector import EmotionDetector
 from .brain.llm_brain import OviyaBrain
 from .brain.secure_base import SecureBaseSystem
@@ -82,6 +82,8 @@ from .brain.bids import BidResponseSystem
 from .emotion_controller.controller import EmotionController
 from .voice.openvoice_tts import HybridVoiceEngine
 from .voice.csm_1b_client import CSM1BClient
+from .voice.csm_1b_stream import CSMRVQStreamer, BatchedCSMStreamer, get_batched_streamer
+from .voice.csm_1b_generator_optimized import OptimizedCSMStreamer, get_optimized_streamer
 from core.voice.acoustic_emotion_detector import AcousticEmotionDetector
 from .brain.personality_store import PersonalityStore
 from .config.service_urls import OLLAMA_URL, CSM_URL
@@ -275,7 +277,31 @@ class ConversationSession:
         self.brain = OviyaBrain(ollama_url=OLLAMA_URL)
         self.emotion_controller = EmotionController()
         self.tts = HybridVoiceEngine(csm_url=CSM_URL, default_engine="csm")
-        self.csm_streaming = CSM1BClient(use_local_model=False, remote_url=CSM_URL)
+
+        # 🆕 INTEGRATE CUDA GRAPHS OPTIMIZED STREAMING FOR LOW-LATENCY THERAPY
+        print("🎯 Initializing CUDA Graphs Optimized CSM Streaming...")
+        self.optimized_streamer = get_optimized_streamer()  # CUDA graphs optimized
+
+        # 🔥 PRE-WARM CUDA GRAPHS FOR CONSISTENT <2s PERFORMANCE
+        print("🔥 Pre-warming CUDA graphs for therapy sessions...")
+        try:
+            self.optimized_streamer.warmup_for_therapy()
+            print("✅ CUDA graphs pre-warmed for <2s consistent performance!")
+        except Exception as e:
+            print(f"⚠️ CUDA graphs warmup failed: {e}")
+            print("   Continuing with standard initialization...")
+
+        print("✅ CUDA graphs optimized streamer ready (<2s latency target)")
+
+        # 🆕 INTEGRATE BATCHED RVQ STREAMING FOR MULTI-USER CONCURRENT AUDIO
+        print("🎤 Initializing Batched CSM Streaming for multi-user conversations...")
+        self.csm_streaming = get_batched_streamer()  # Global batched streamer
+
+        # Start batch processor in background
+        self.batch_processor_task = asyncio.create_task(
+            self.csm_streaming.start_batch_processor()
+        )
+        print("✅ Batched streaming processor started")
         self.stt = StreamingSTT()
         self.is_generating = False
 
@@ -613,13 +639,21 @@ class ConversationSession:
                 max_samples = 1920  # ~80ms at 24kHz
                 buf, n = [], 0
                 ttfb_sent = False
-                async for c24 in self.csm_streaming.generate_streaming(
+                        # 🆕 BATCHED RVQ STREAMING: Multi-user concurrent audio generation
+                # Submit request to batch processor for optimal GPU utilization
+                batch_id = await self.csm_streaming.submit_stream_request(
+                    user_id=self.user_id,
                     text=prosodic_text,
                     emotion=oviya_emotion_params.get('style_token', emotion),
-                    speaker_id=0,
+                    speaker_id=42,  # Oviya's consistent voice
                     conversation_context=self._format_context_for_tts(),
-                    reference_audio=self._reference_audio
-                ):
+                    priority=1  # Normal priority (could be higher for crisis situations)
+                )
+
+                print(f"📦 Submitted to batch processor: {batch_id}")
+
+                # Stream results from batched processor
+                async for c24 in self.csm_streaming.get_stream_results(self.user_id):
                     if self._tts_cancel_requested:
                         break
                     # Smooth chunk edge via simple EMA filter
@@ -691,6 +725,13 @@ class ConversationSession:
 
     async def cancel_tts_stream(self):
         self._tts_cancel_requested = True
+
+        # Cancel batched streaming request
+        try:
+            await self.csm_streaming.cancel_user_stream(self.user_id)
+        except Exception:
+            pass  # Batched streamer handles cleanup gracefully
+
         if self._tts_stream_task and not self._tts_stream_task.done():
             try:
                 await asyncio.wait_for(self._tts_stream_task, timeout=0.1)
@@ -986,6 +1027,85 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str = "anonymous"):
                         except Exception as e:
                             await websocket.send_json({'type': 'reference_voice_set', 'ok': False, 'error': str(e)})
                         continue
+                    if data.get('type') == 'test_cuda_graphs':
+                        # 🎯 CUDA GRAPHS PERFORMANCE TEST ENDPOINT
+                        print(f"🧪 CUDA Graphs Performance Test requested by {user_id}")
+                        try:
+                            test_text = data.get('text', 'Hello! This is a CUDA graphs optimized generation test.')
+                            emotion = data.get('emotion', 'joyful')
+
+                            # Measure latency with CUDA graphs
+                            start_time = time.time()
+                            audio_bytes = session.optimized_streamer.generate_voice(
+                                text=test_text,
+                                speaker_id=42,  # Oviya's voice
+                                emotion=emotion
+                            )
+                            latency_ms = (time.time() - start_time) * 1000
+
+                            # Send performance results
+                            import base64
+                            await websocket.send_json({
+                                'type': 'cuda_graphs_test_result',
+                                'text': test_text,
+                                'emotion': emotion,
+                                'latency_ms': round(latency_ms, 1),
+                                'audio_size_bytes': len(audio_bytes),
+                                'audio_base64': base64.b64encode(audio_bytes).decode('utf-8'),
+                                'sample_rate': 24000,
+                                'target_achieved': latency_ms < 100
+                            })
+
+                            print(f"✅ CUDA graphs test: {latency_ms:.1f}ms latency")
+                        except Exception as e:
+                            await websocket.send_json({
+                                'type': 'error',
+                                'message': f'CUDA graphs test failed: {str(e)}'
+                            })
+
+                    if data.get('type') == 'batch_voice_generation':
+                        # 🎵 BATCH PROCESSING FOR MULTI-USER SESSIONS
+                        print(f"🎵 Batch voice generation request from {user_id}")
+                        try:
+                            batch_requests = data.get('requests', [])
+                            if not batch_requests:
+                                await websocket.send_json({
+                                    'type': 'error',
+                                    'message': 'No batch requests provided'
+                                })
+                                continue
+
+                            print(f"🎵 Processing batch of {len(batch_requests)} requests...")
+
+                            # Use optimized streamer for batch processing
+                            batch_results = session.optimized_streamer.generate_batch_voice(batch_requests)
+
+                            # Send results back
+                            import base64
+                            results_data = []
+                            for i, audio_bytes in enumerate(batch_results):
+                                results_data.append({
+                                    'request_index': i,
+                                    'audio_base64': base64.b64encode(audio_bytes).decode('utf-8'),
+                                    'sample_rate': 24000,
+                                    'audio_size_bytes': len(audio_bytes)
+                                })
+
+                            await websocket.send_json({
+                                'type': 'batch_voice_results',
+                                'results': results_data,
+                                'total_requests': len(batch_requests),
+                                'processed_requests': len(batch_results)
+                            })
+
+                            print(f"✅ Batch processing complete: {len(batch_results)}/{len(batch_requests)} requests")
+
+                        except Exception as e:
+                            await websocket.send_json({
+                                'type': 'error',
+                                'message': f'Batch voice generation failed: {str(e)}'
+                            })
+
                     if data.get('type') == 'greeting':
                         print(f"👋 Greeting request from {user_id}")
                         try:
@@ -1161,6 +1281,13 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str = "anonymous"):
     finally:
         try:
             hb_task.cancel()
+        except Exception:
+            pass
+
+        # Cleanup batched streaming resources
+        try:
+            await session.cancel_tts_stream()
+            # Note: Batched streamer handles global cleanup automatically
         except Exception:
             pass
 

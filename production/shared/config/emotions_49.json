@@ -1,0 +1,506 @@
+{
+  "emotion_labels": {
+    "_comment_tier1": "=== TIER 1: Core Emotions (15 emotions) ===",
+    
+    "calm_supportive": {
+      "style_token": "#calm",
+      "pitch_scale": 0.9,
+      "rate_scale": 0.9,
+      "energy_scale": 0.8,
+      "prosody_hint": "soft, long pauses",
+      "description": "Gentle, soothing, reassuring tone",
+      "tier": 1
+    },
+    "empathetic_sad": {
+      "style_token": "#sad",
+      "pitch_scale": 0.85,
+      "rate_scale": 0.85,
+      "energy_scale": 0.6,
+      "prosody_hint": "slight downward intonation",
+      "description": "Warm, compassionate, understanding",
+      "tier": 1
+    },
+    "joyful_excited": {
+      "style_token": "#joy",
+      "pitch_scale": 1.15,
+      "rate_scale": 1.05,
+      "energy_scale": 1.2,
+      "prosody_hint": "brighter, wider pitch range",
+      "description": "Happy, enthusiastic, celebratory",
+      "tier": 1
+    },
+    "playful": {
+      "style_token": "#playful",
+      "pitch_scale": 1.05,
+      "rate_scale": 1.1,
+      "energy_scale": 1.0,
+      "prosody_hint": "light staccato, smiles",
+      "description": "Fun, lighthearted, teasing",
+      "tier": 1
+    },
+    "confident": {
+      "style_token": "#confident",
+      "pitch_scale": 1.0,
+      "rate_scale": 1.0,
+      "energy_scale": 1.1,
+      "prosody_hint": "steady, clear articulation",
+      "description": "Assured, strong, capable",
+      "tier": 1
+    },
+    "concerned_anxious": {
+      "style_token": "#anxious",
+      "pitch_scale": 0.95,
+      "rate_scale": 0.95,
+      "energy_scale": 0.9,
+      "prosody_hint": "breathy, short phrases",
+      "description": "Worried, caring, attentive",
+      "tier": 1
+    },
+    "angry_firm": {
+      "style_token": "#firm",
+      "pitch_scale": 0.95,
+      "rate_scale": 1.0,
+      "energy_scale": 1.15,
+      "prosody_hint": "controlled intensity",
+      "description": "Strong, boundary-setting, serious",
+      "tier": 1
+    },
+    "neutral": {
+      "style_token": "#neutral",
+      "pitch_scale": 1.0,
+      "rate_scale": 1.0,
+      "energy_scale": 1.0,
+      "prosody_hint": "natural, conversational",
+      "description": "Balanced, friendly, warm",
+      "tier": 1
+    },
+    "comforting": {
+      "style_token": "#calm",
+      "pitch_scale": 0.88,
+      "rate_scale": 0.88,
+      "energy_scale": 0.75,
+      "prosody_hint": "soft, warm, gentle",
+      "description": "Soothing, nurturing, protective",
+      "tier": 1
+    },
+    "encouraging": {
+      "style_token": "#confident",
+      "pitch_scale": 1.05,
+      "rate_scale": 1.0,
+      "energy_scale": 1.05,
+      "prosody_hint": "uplifting, steady",
+      "description": "Motivating, supportive, inspiring",
+      "tier": 1
+    },
+    "thoughtful": {
+      "style_token": "#neutral",
+      "pitch_scale": 0.95,
+      "rate_scale": 0.92,
+      "energy_scale": 0.85,
+      "prosody_hint": "measured, deliberate",
+      "description": "Contemplative, reflective, considered",
+      "tier": 1
+    },
+    "affectionate": {
+      "style_token": "#joy",
+      "pitch_scale": 1.08,
+      "rate_scale": 0.95,
+      "energy_scale": 0.9,
+      "prosody_hint": "warm, tender",
+      "description": "Loving, caring, gentle warmth",
+      "tier": 1
+    },
+    "grateful": {
+      "style_token": "#joy",
+      "pitch_scale": 1.03,
+      "rate_scale": 0.98,
+      "energy_scale": 0.95,
+      "prosody_hint": "sincere, warm",
+      "description": "Appreciative, thankful, touched",
+      "tier": 1
+    },
+    "curious": {
+      "style_token": "#playful",
+      "pitch_scale": 1.08,
+      "rate_scale": 1.05,
+      "energy_scale": 1.0,
+      "prosody_hint": "rising intonation, light",
+      "description": "Interested, inquisitive, engaged",
+      "tier": 1
+    },
+    "relieved": {
+      "style_token": "#calm",
+      "pitch_scale": 0.98,
+      "rate_scale": 0.95,
+      "energy_scale": 0.8,
+      "prosody_hint": "soft exhale, gentle",
+      "description": "At ease, unburdened, relaxed",
+      "tier": 1
+    },
+    
+    "_comment_tier2": "=== TIER 2: Contextual/Nuanced Emotions (20 emotions) ===",
+    
+    "melancholic": {
+      "style_token": "#sad",
+      "pitch_scale": 0.82,
+      "rate_scale": 0.8,
+      "energy_scale": 0.55,
+      "prosody_hint": "wistful, soft downward",
+      "description": "Pensive sadness, bittersweet",
+      "tier": 2
+    },
+    "wistful": {
+      "style_token": "#sad",
+      "pitch_scale": 0.88,
+      "rate_scale": 0.85,
+      "energy_scale": 0.65,
+      "prosody_hint": "gentle, nostalgic",
+      "description": "Longing, nostalgic, gentle yearning",
+      "tier": 2
+    },
+    "tired": {
+      "style_token": "#calm",
+      "pitch_scale": 0.85,
+      "rate_scale": 0.82,
+      "energy_scale": 0.5,
+      "prosody_hint": "slow, breathy",
+      "description": "Fatigued, drained, weary",
+      "tier": 2
+    },
+    "dreamy": {
+      "style_token": "#calm",
+      "pitch_scale": 0.92,
+      "rate_scale": 0.88,
+      "energy_scale": 0.7,
+      "prosody_hint": "soft, floating quality",
+      "description": "Ethereal, imaginative, distant",
+      "tier": 2
+    },
+    "proud": {
+      "style_token": "#confident",
+      "pitch_scale": 1.05,
+      "rate_scale": 0.95,
+      "energy_scale": 1.08,
+      "prosody_hint": "strong, clear, warm",
+      "description": "Accomplished, satisfied, dignified",
+      "tier": 2
+    },
+    "sympathetic": {
+      "style_token": "#sad",
+      "pitch_scale": 0.9,
+      "rate_scale": 0.9,
+      "energy_scale": 0.75,
+      "prosody_hint": "gentle, understanding",
+      "description": "Compassionate, understanding, kind",
+      "tier": 2
+    },
+    "reflective": {
+      "style_token": "#neutral",
+      "pitch_scale": 0.93,
+      "rate_scale": 0.88,
+      "energy_scale": 0.8,
+      "prosody_hint": "measured, introspective",
+      "description": "Contemplative, meditative, deep thought",
+      "tier": 2
+    },
+    "amused": {
+      "style_token": "#playful",
+      "pitch_scale": 1.08,
+      "rate_scale": 1.02,
+      "energy_scale": 1.0,
+      "prosody_hint": "light, smiling",
+      "description": "Entertained, tickled, lightly laughing",
+      "tier": 2
+    },
+    "apologetic": {
+      "style_token": "#sad",
+      "pitch_scale": 0.92,
+      "rate_scale": 0.93,
+      "energy_scale": 0.7,
+      "prosody_hint": "soft, sincere, downward",
+      "description": "Sorry, regretful, humble",
+      "tier": 2
+    },
+    "tender": {
+      "style_token": "#calm",
+      "pitch_scale": 0.95,
+      "rate_scale": 0.9,
+      "energy_scale": 0.75,
+      "prosody_hint": "very soft, gentle",
+      "description": "Gentle, delicate, vulnerable warmth",
+      "tier": 2
+    },
+    "bored": {
+      "style_token": "#neutral",
+      "pitch_scale": 0.9,
+      "rate_scale": 0.9,
+      "energy_scale": 0.6,
+      "prosody_hint": "flat, monotone",
+      "description": "Uninterested, listless, disengaged",
+      "tier": 2
+    },
+    "confused": {
+      "style_token": "#anxious",
+      "pitch_scale": 1.0,
+      "rate_scale": 0.95,
+      "energy_scale": 0.85,
+      "prosody_hint": "uncertain, questioning",
+      "description": "Puzzled, uncertain, searching",
+      "tier": 2
+    },
+    "embarrassed": {
+      "style_token": "#anxious",
+      "pitch_scale": 1.03,
+      "rate_scale": 1.05,
+      "energy_scale": 0.75,
+      "prosody_hint": "quick, shy, awkward",
+      "description": "Self-conscious, awkward, sheepish",
+      "tier": 2
+    },
+    "envious": {
+      "style_token": "#firm",
+      "pitch_scale": 0.92,
+      "rate_scale": 0.95,
+      "energy_scale": 0.9,
+      "prosody_hint": "tight, controlled",
+      "description": "Jealous, wanting, comparative",
+      "tier": 2
+    },
+    "guilty": {
+      "style_token": "#sad",
+      "pitch_scale": 0.88,
+      "rate_scale": 0.9,
+      "energy_scale": 0.65,
+      "prosody_hint": "heavy, subdued",
+      "description": "Remorseful, conscience-stricken",
+      "tier": 2
+    },
+    "hesitant": {
+      "style_token": "#anxious",
+      "pitch_scale": 0.98,
+      "rate_scale": 0.88,
+      "energy_scale": 0.75,
+      "prosody_hint": "uncertain, halting",
+      "description": "Unsure, cautious, wavering",
+      "tier": 2
+    },
+    "impatient": {
+      "style_token": "#firm",
+      "pitch_scale": 1.05,
+      "rate_scale": 1.1,
+      "energy_scale": 1.1,
+      "prosody_hint": "quick, terse",
+      "description": "Restless, eager, frustrated delay",
+      "tier": 2
+    },
+    "impressed": {
+      "style_token": "#joy",
+      "pitch_scale": 1.08,
+      "rate_scale": 1.0,
+      "energy_scale": 1.05,
+      "prosody_hint": "bright, surprised delight",
+      "description": "Admiring, amazed, respectful",
+      "tier": 2
+    },
+    "lonely": {
+      "style_token": "#sad",
+      "pitch_scale": 0.85,
+      "rate_scale": 0.85,
+      "energy_scale": 0.55,
+      "prosody_hint": "hollow, yearning",
+      "description": "Isolated, longing for connection",
+      "tier": 2
+    },
+    "nostalgic": {
+      "style_token": "#sad",
+      "pitch_scale": 0.9,
+      "rate_scale": 0.88,
+      "energy_scale": 0.7,
+      "prosody_hint": "wistful, warm-sad mix",
+      "description": "Reminiscent, bittersweet memory",
+      "tier": 2
+    },
+    
+    "_comment_tier3": "=== TIER 3: Expressive/Dramatic Emotions (14 emotions) ===",
+    
+    "sarcastic": {
+      "style_token": "#playful",
+      "pitch_scale": 1.05,
+      "rate_scale": 0.95,
+      "energy_scale": 0.95,
+      "prosody_hint": "exaggerated, mocking lilt",
+      "description": "Ironic, mocking, dry humor",
+      "tier": 3
+    },
+    "mischievous": {
+      "style_token": "#playful",
+      "pitch_scale": 1.1,
+      "rate_scale": 1.05,
+      "energy_scale": 1.05,
+      "prosody_hint": "teasing, impish",
+      "description": "Playfully naughty, impish, cheeky",
+      "tier": 3
+    },
+    "reassuring": {
+      "style_token": "#calm",
+      "pitch_scale": 0.95,
+      "rate_scale": 0.92,
+      "energy_scale": 0.85,
+      "prosody_hint": "steady, warm, firm",
+      "description": "Calming, steadying, confidence-giving",
+      "tier": 3
+    },
+    "excited": {
+      "style_token": "#joy",
+      "pitch_scale": 1.18,
+      "rate_scale": 1.12,
+      "energy_scale": 1.25,
+      "prosody_hint": "bright, fast, high energy",
+      "description": "Thrilled, animated, high arousal",
+      "tier": 3
+    },
+    "nervous": {
+      "style_token": "#anxious",
+      "pitch_scale": 1.05,
+      "rate_scale": 1.05,
+      "energy_scale": 0.95,
+      "prosody_hint": "quick, shaky, tense",
+      "description": "Jittery, apprehensive, on edge",
+      "tier": 3
+    },
+    "frustrated": {
+      "style_token": "#firm",
+      "pitch_scale": 1.0,
+      "rate_scale": 1.02,
+      "energy_scale": 1.15,
+      "prosody_hint": "tight, strained",
+      "description": "Exasperated, stymied, irritated",
+      "tier": 3
+    },
+    "determined": {
+      "style_token": "#confident",
+      "pitch_scale": 1.0,
+      "rate_scale": 0.95,
+      "energy_scale": 1.15,
+      "prosody_hint": "resolute, firm, clear",
+      "description": "Resolute, focused, unwavering",
+      "tier": 3
+    },
+    "hopeful": {
+      "style_token": "#joy",
+      "pitch_scale": 1.05,
+      "rate_scale": 0.98,
+      "energy_scale": 1.0,
+      "prosody_hint": "uplifting, optimistic",
+      "description": "Optimistic, expectant, positive",
+      "tier": 3
+    },
+    "fearful": {
+      "style_token": "#anxious",
+      "pitch_scale": 1.08,
+      "rate_scale": 1.08,
+      "energy_scale": 1.0,
+      "prosody_hint": "quick, high, tense",
+      "description": "Scared, afraid, threatened",
+      "tier": 3
+    },
+    "disgusted": {
+      "style_token": "#firm",
+      "pitch_scale": 0.88,
+      "rate_scale": 0.92,
+      "energy_scale": 0.85,
+      "prosody_hint": "recoiling, harsh",
+      "description": "Repelled, revolted, aversive",
+      "tier": 3
+    },
+    "surprised": {
+      "style_token": "#playful",
+      "pitch_scale": 1.12,
+      "rate_scale": 1.05,
+      "energy_scale": 1.1,
+      "prosody_hint": "sudden, bright, wide",
+      "description": "Startled, unexpected, astonished",
+      "tier": 3
+    },
+    "disappointed": {
+      "style_token": "#sad",
+      "pitch_scale": 0.88,
+      "rate_scale": 0.88,
+      "energy_scale": 0.65,
+      "prosody_hint": "deflated, downward",
+      "description": "Let down, unfulfilled, deflated",
+      "tier": 3
+    },
+    "defiant": {
+      "style_token": "#firm",
+      "pitch_scale": 1.05,
+      "rate_scale": 1.0,
+      "energy_scale": 1.2,
+      "prosody_hint": "challenging, bold",
+      "description": "Resistant, rebellious, standing ground",
+      "tier": 3
+    },
+    "content": {
+      "style_token": "#calm",
+      "pitch_scale": 0.98,
+      "rate_scale": 0.95,
+      "energy_scale": 0.85,
+      "prosody_hint": "peaceful, satisfied",
+      "description": "Satisfied, at peace, fulfilled",
+      "tier": 3
+    }
+  },
+  
+  "emotion_keywords": {
+    "calm_supportive": ["stressed", "overwhelmed", "anxious", "worried", "nervous", "scared"],
+    "empathetic_sad": ["sad", "depressed", "down", "lonely", "hurt", "alone", "crying"],
+    "joyful_excited": ["excited", "happy", "great", "amazing", "wonderful", "promoted", "fantastic"],
+    "playful": ["funny", "laugh", "joke", "silly", "fun"],
+    "confident": ["can", "will", "strong", "capable", "confident"],
+    "concerned_anxious": ["concern", "worry", "issue", "problem"],
+    "angry_firm": ["angry", "mad", "frustrated", "furious", "annoyed"],
+    "neutral": [],
+    "comforting": ["upset", "difficult", "hard time", "struggling"],
+    "encouraging": ["trying", "working on", "attempting", "effort"],
+    "thoughtful": ["thinking", "considering", "wondering", "pondering"],
+    "affectionate": ["love", "care", "sweet", "dear"],
+    "grateful": ["thank", "appreciate", "grateful", "thankful"],
+    "curious": ["why", "how", "what if", "wonder"],
+    "relieved": ["finally", "glad it's over", "phew", "relief"],
+    "melancholic": ["miss", "used to", "remember when", "bittersweet"],
+    "wistful": ["wish", "if only", "long ago", "remember"],
+    "tired": ["exhausted", "drained", "worn out", "tired"],
+    "dreamy": ["imagine", "fantasy", "dream", "ethereal"],
+    "proud": ["accomplished", "achieved", "proud", "succeeded"],
+    "sympathetic": ["understand", "feel for you", "empathize"],
+    "reflective": ["realized", "learned", "insight", "perspective"],
+    "amused": ["haha", "lol", "that's funny", "chuckle"],
+    "apologetic": ["sorry", "apolog", "my fault", "my bad"],
+    "tender": ["precious", "delicate", "gentle", "soft"],
+    "bored": ["boring", "dull", "uninteresting", "meh"],
+    "confused": ["don't understand", "confused", "unclear", "not sure what"],
+    "embarrassed": ["awkward", "embarrassed", "mortified", "humiliating"],
+    "envious": ["jealous", "wish I had", "envy", "they have"],
+    "guilty": ["guilty", "fault", "shouldn't have", "regret"],
+    "hesitant": ["maybe", "not sure", "uncertain", "hesitate"],
+    "impatient": ["waiting", "taking forever", "hurry", "come on"],
+    "impressed": ["wow", "impressive", "incredible", "blown away"],
+    "lonely": ["alone", "lonely", "isolated", "no one"],
+    "nostalgic": ["remember", "back then", "old days", "nostalgia"],
+    "sarcastic": ["yeah right", "oh sure", "totally", "obviously"],
+    "mischievous": ["hehe", "sneaky", "plot", "prank"],
+    "reassuring": ["it's okay", "you're safe", "I'm here", "don't worry"],
+    "excited": ["can't wait", "so excited", "thrilled", "pumped"],
+    "nervous": ["nervous", "jittery", "on edge", "anxious"],
+    "frustrated": ["frustrated", "stuck", "nothing works", "giving up"],
+    "determined": ["will", "going to", "determined", "won't give up"],
+    "hopeful": ["hope", "hopefully", "optimistic", "looking forward"],
+    "fearful": ["scared", "afraid", "terrified", "frightening"],
+    "disgusted": ["gross", "disgusting", "revolting", "ew"],
+    "surprised": ["surprised", "unexpected", "wow", "didn't expect"],
+    "disappointed": ["disappointed", "let down", "expected more", "hoped"],
+    "defiant": ["won't", "refuse", "no way", "not going to"],
+    "content": ["content", "satisfied", "at peace", "happy with"]
+  }
+}
+

@@ -1,0 +1,55 @@
+{
+  "description": "Stage 0: Emotion Reference Evaluation Configuration",
+  "purpose": "Test CSM's ability to reproduce emotions from OpenVoice V2 references",
+  
+  "test_sentences": {
+    "calm_supportive": "Take a deep breath, I'm here with you.",
+    "empathetic_sad": "I understand how you feel, I'm so sorry.",
+    "joyful_excited": "That's amazing! I'm so proud of you!",
+    "playful": "You're so funny, I love your sense of humor!",
+    "confident": "You've got this, I believe in you.",
+    "concerned_anxious": "I'm worried about you, are you okay?",
+    "angry_firm": "That's not acceptable.",
+    "neutral": "Hello, how are you doing today?"
+  },
+  
+  "openvoice_emotion_mapping": {
+    "calm_supportive": "calm",
+    "empathetic_sad": "sad",
+    "joyful_excited": "happy",
+    "playful": "cheerful",
+    "confident": "confident",
+    "concerned_anxious": "worried",
+    "angry_firm": "angry",
+    "neutral": "neutral"
+  },
+  
+  "evaluation_thresholds": {
+    "high_similarity": 0.6,
+    "moderate_similarity": 0.4,
+    "low_similarity": 0.2
+  },
+  
+  "interpretation_guide": {
+    "high_similarity": "Strong emotion transfer - proceed to fine-tuning",
+    "moderate_similarity": "Moderate transfer - test with enhanced references",
+    "low_similarity": "Weak transfer - consider architectural changes"
+  },
+  
+  "next_steps": {
+    "if_successful": [
+      "Stage 1: Fine-tune CSM with emotion conditioning",
+      "Stage 2: Add Oviya voice LoRA",
+      "Stage 3: Production deployment"
+    ],
+    "if_unsuccessful": [
+      "Test with longer reference clips",
+      "Try explicit emotion tokens",
+      "Consider alternative architectures"
+    ]
+  }
+}
+
+
+
+

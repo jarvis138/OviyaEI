@@ -327,33 +327,79 @@ class HybridVoiceEngine:
                 return self._generate_with_mock(text, emotion_params)
     
     def _generate_with_mock(self, text: str, emotion_params: Dict) -> torch.Tensor:
-        """Generate mock audio for testing."""
-        # Calculate duration
-        duration = len(text.split()) * 0.5
+        """Generate improved mock audio using formant synthesis for more realistic speech-like sounds."""
+        # Calculate duration based on text length
+        duration = max(len(text.split()) * 0.4, 2.0)  # At least 2 seconds
         num_samples = int(duration * 24000)  # 24kHz
-        
+
         # Get emotion parameters
         pitch_scale = emotion_params.get("pitch_scale", 1.0)
         energy_scale = emotion_params.get("energy_scale", 1.0)
-        
-        # Generate complex tone
-        t = torch.linspace(0, duration, num_samples)
-        base_freq = 200 * pitch_scale
-        
-        audio = (
-            0.4 * energy_scale * torch.sin(2 * torch.pi * base_freq * t) +
-            0.2 * energy_scale * torch.sin(2 * torch.pi * base_freq * 2 * t)
-        )
-        
-        # Add emotion-specific modulation
         emotion = emotion_params.get("emotion_label", "neutral")
+
+        # Create time array
+        t = torch.linspace(0, duration, num_samples)
+
+        # Base fundamental frequency (varies for natural speech)
+        base_f0 = 180 * pitch_scale
+
+        # Add natural pitch variation (intonation)
+        pitch_variation = 0.15 * torch.sin(2 * torch.pi * 0.5 * t)  # Slow modulation
+        pitch_variation += 0.1 * torch.sin(2 * torch.pi * 2.0 * t)   # Faster variation
+        f0 = base_f0 * (1 + pitch_variation)
+
+        # Generate fundamental frequency
+        fundamental = energy_scale * torch.sin(2 * torch.pi * torch.cumsum(f0 * (1/24000), dim=0))
+
+        # Add formants (vowel-like resonances) - makes it sound more speech-like
+        # Formant frequencies for /a/ vowel sound
+        f1, f2, f3 = 700, 1200, 2500  # Formant frequencies in Hz
+
+        formant1 = 0.3 * energy_scale * torch.sin(2 * torch.pi * f1 * t)
+        formant2 = 0.2 * energy_scale * torch.sin(2 * torch.pi * f2 * t)
+        formant3 = 0.1 * energy_scale * torch.sin(2 * torch.pi * f3 * t)
+
+        # Combine fundamental and formants
+        audio = fundamental + formant1 + formant2 + formant3
+
+        # Add emotion-specific characteristics
         if emotion == "joyful_excited":
-            vibrato = 0.1 * torch.sin(2 * torch.pi * 5 * t)
+            # Higher pitch, more energy, faster variations
+            vibrato = 0.15 * torch.sin(2 * torch.pi * 6 * t)
             audio = audio * (1 + vibrato)
-        
-        audio = audio + 0.02 * torch.randn(num_samples)
-        
-        print(f"🔊 Mock generated: {duration:.2f}s")
+            audio = audio * 1.2  # Boost energy
+
+        elif emotion == "empathetic_sad":
+            # Lower pitch, softer, slower variations
+            slow_modulation = 0.1 * torch.sin(2 * torch.pi * 0.3 * t)
+            audio = audio * (0.8 + slow_modulation)
+            audio = audio * 0.8  # Reduce energy
+
+        elif emotion == "confident":
+            # Steady pitch, strong energy
+            audio = audio * 1.1  # Boost energy
+            # Add slight emphasis variation
+            emphasis = 0.05 * torch.sin(2 * torch.pi * 1.5 * t)
+            audio = audio * (1 + emphasis)
+
+        # Add natural speech characteristics
+        # Breathing/inhalation sounds at pauses
+        pause_positions = torch.rand(3) * duration
+        for pause in pause_positions:
+            pause_mask = (t > pause) & (t < pause + 0.1)
+            breath_noise = 0.05 * torch.randn(pause_mask.sum())
+            audio[pause_mask] += breath_noise
+
+        # Add subtle noise for naturalness (reduced from original)
+        noise = 0.01 * torch.randn(num_samples)
+        audio = audio + noise
+
+        # Normalize to prevent clipping
+        max_val = torch.abs(audio).max()
+        if max_val > 0:
+            audio = audio / max_val * 0.8
+
+        print(f"🔊 Enhanced mock TTS generated: {duration:.2f}s ({emotion})")
         return audio.to(self.device)
     
     def _map_emotion_to_csm_temperature(self, emotion_params: Dict) -> float:

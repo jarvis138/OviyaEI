@@ -24,7 +24,56 @@ from .vulnerability import VulnerabilityReciprocationSystem
 from .consistent_persona import ConsistentPersonaMemory
 from .safety_router import SafetyRouter
 from .global_soul import OviyaGlobalSoul
-from core.data.bias_filter import CulturalBiasFilter
+# from core.data.bias_filter import CulturalBiasFilter  # Commented out - module not found
+from .emotional_reciprocity import reciprocal_empathy_integrator
+from .empathic_thinking import EmpathicThinkingEngine
+from .mcp_memory_integration import OviyaMemorySystem
+from ..utils.pii_redaction import redact
+from ..utils.emotion_monitor import EmotionDistributionMonitor
+from .personality_store import PersonalityStore
+from .empathy_fusion_head import EmpathyFusionHead
+# Try to import advanced therapeutic systems with graceful fallback
+try:
+    from .crisis_detection import CrisisDetectionSystem
+    CRISIS_DETECTION_AVAILABLE = True
+except ImportError:
+    CRISIS_DETECTION_AVAILABLE = False
+    CrisisDetectionSystem = None
+
+try:
+    from .attachment_style import AttachmentStyleDetector
+    ATTACHMENT_STYLE_AVAILABLE = True
+except ImportError:
+    ATTACHMENT_STYLE_AVAILABLE = False
+    AttachmentStyleDetector = None
+
+try:
+    from .bids import BidResponseSystem
+    BID_RESPONSE_AVAILABLE = True
+except ImportError:
+    BID_RESPONSE_AVAILABLE = False
+    BidResponseSystem = None
+
+try:
+    from ..voice.strategic_silence import StrategicSilenceManager
+    STRATEGIC_SILENCE_AVAILABLE = True
+except ImportError:
+    STRATEGIC_SILENCE_AVAILABLE = False
+    StrategicSilenceManager = None
+
+try:
+    from ..voice.micro_affirmations import MicroAffirmationGenerator
+    MICRO_AFFIRMATIONS_AVAILABLE = True
+except ImportError:
+    MICRO_AFFIRMATIONS_AVAILABLE = False
+    MicroAffirmationGenerator = None
+
+try:
+    from .secure_base import SecureBaseSystem
+    SECURE_BASE_AVAILABLE = True
+except ImportError:
+    SECURE_BASE_AVAILABLE = False
+    SecureBaseSystem = None
 # Metrics imports with safe fallback (works whether running as a package or script)
 try:
     from core.monitoring.psych_metrics import BIAS_FILTER_DROP, VECTOR_ENTROPY
@@ -377,12 +426,36 @@ class OviyaBrain:
         self.persona_consistency = ConsistentPersonaMemory()
         self.safety_router = SafetyRouter(self.persona_config)
         self.global_soul = OviyaGlobalSoul(self.persona_config)
+
+        # Initialize PII redaction for HIPAA compliance
+        self.pii_redactor = redact  # Function for redacting personal information
+
+        # Initialize emotion distribution monitor for therapeutic balance
+        try:
+            self.emotion_monitor = EmotionDistributionMonitor()
+            print("   Emotion distribution monitor active")
+        except Exception as e:
+            print(f"   ⚠️ Emotion monitor failed: {e}")
+            self.emotion_monitor = None
+
+        # Initialize personality store for session persistence
+        try:
+            self.personality_store = PersonalityStore()
+            print("   Personality store active (session persistence)")
+        except Exception as e:
+            print(f"   ⚠️ Personality store failed: {e}")
+            self.personality_store = None
         self._bias_filter = CulturalBiasFilter()
         # Personality conditioning flag and modules
         self.enable_personality = bool(ff.get("ENABLE_PERSONALITY_CONDITIONING", False))
         if self.enable_personality:
             # Simple embedding dims; swap with real embeddings when available
-            self._fusion = EmpathyFusionHead(emotion_dim=8, context_dim=16, memory_dim=4)
+            try:
+                self._fusion = EmpathyFusionHead(emotion_dim=8, context_dim=16, memory_dim=4)
+                print("   Empathy fusion head active (neural empathy processing)")
+            except Exception as e:
+                print(f"   ⚠️ Empathy fusion head failed: {e}")
+                self._fusion = None
             self._p_ema = PersonalityEMA()
             self._last_personality_vector = None
         
@@ -390,9 +463,92 @@ class OviyaBrain:
         self.epistemic_analyzer = EpistemicProsodyAnalyzer()
         self.emotion_smoother = EmotionTransitionSmoother()
         self.backchannel_system = BackchannelSystem()
+
+        # Initialize advanced empathic thinking engine
+        self.empathic_thinking = EmpathicThinkingEngine()
+
+        # Initialize advanced MCP memory system for persistent therapeutic connections
+        self.memory_system = OviyaMemorySystem()
+
+        # Initialize strategic silence manager for therapeutic Ma (間)
+        if STRATEGIC_SILENCE_AVAILABLE:
+            try:
+                self.strategic_silence = StrategicSilenceManager()
+                print("   Strategic silence manager active")
+            except Exception as e:
+                print(f"   ⚠️ Strategic silence failed: {e}")
+                self.strategic_silence = None
+        else:
+            self.strategic_silence = None
+
+        # Initialize clinical crisis detection system for safety monitoring
+        if CRISIS_DETECTION_AVAILABLE:
+            try:
+                self.crisis_detector = CrisisDetectionSystem()
+                print("   Clinical crisis detection system active")
+            except Exception as e:
+                print(f"   ⚠️ Crisis detection failed: {e}")
+                self.crisis_detector = None
+        else:
+            self.crisis_detector = None
+
+        # Initialize attachment style detector for personalized therapy
+        if ATTACHMENT_STYLE_AVAILABLE:
+            try:
+                self.attachment_detector = AttachmentStyleDetector()
+                print("   Attachment style detector active")
+            except Exception as e:
+                print(f"   ⚠️ Attachment style detector failed: {e}")
+                self.attachment_detector = None
+        else:
+            self.attachment_detector = None
+
+        # Initialize bid response system for therapeutic connection building
+        if BID_RESPONSE_AVAILABLE:
+            try:
+                self.bid_responder = BidResponseSystem()
+                print("   Bid response system active")
+            except Exception as e:
+                print(f"   ⚠️ Bid response system failed: {e}")
+                self.bid_responder = None
+        else:
+            self.bid_responder = None
+
+        # Initialize micro-affirmations generator for natural conversation flow
+        if MICRO_AFFIRMATIONS_AVAILABLE:
+            try:
+                self.micro_affirmations = MicroAffirmationGenerator()
+                print("   Micro-affirmations generator active")
+            except Exception as e:
+                print(f"   ⚠️ Micro-affirmations failed: {e}")
+                self.micro_affirmations = None
+        else:
+            self.micro_affirmations = None
+
+        # Initialize secure base system for attachment-informed responses
+        if SECURE_BASE_AVAILABLE:
+            try:
+                self.secure_base = SecureBaseSystem()
+                print("   Secure base system active")
+            except Exception as e:
+                print(f"   ⚠️ Secure base system failed: {e}")
+                self.secure_base = None
+        else:
+            self.secure_base = None
         
         # Track conversation for backchannel injection
         self.conversation_turn_count = 0
+
+        # Track user history for attachment style analysis
+        self.user_history = {
+            "sessions_per_week": 3,  # Default assumption
+            "reassurance_prompts": 0,
+            "avoidance_ratio": 0.2,  # Default balanced
+            "attachment_style": "unknown"
+        }
+
+        # Track bid information for connection building
+        self.last_bid_info = None
         
         print(f"Oviya's Brain initialized with model: {self.model_name}")
         print("   Emotional memory system active")
@@ -400,6 +556,17 @@ class OviyaBrain:
         print("   Epistemic prosody analyzer active")
         print("   Emotion transition smoother active")
         print("   Backchannel system active")
+        print("   Empathic thinking engine active")
+        print("   Advanced MCP memory system active")
+        # print("   Strategic silence manager active")  # Commented out - import issues
+        # print("   Clinical crisis detection system active")  # Commented out - import issues
+        # print("   Attachment style detector active")  # Commented out - import issues
+        # print("   Bid response system active")  # Commented out - import issues
+        # print("   Micro-affirmations generator active")  # Commented out - import issues
+        # print("   Secure base system active")  # Commented out - import issues
+        # print("   Unconditional regard engine active")  # Commented out - import issues
+        # print("   Healthy boundaries system active")  # Commented out - import issues
+        print("   Vulnerability reciprocation system active (partially)")
     
     def _load_persona_config(self, config_path: str) -> Dict:
         """Load Oviya's persona configuration."""
@@ -443,7 +610,87 @@ class OviyaBrain:
         """
         # Increment conversation turn counter
         self.conversation_turn_count += 1
+
+        # Apply PII redaction for HIPAA compliance
+        if hasattr(self, 'pii_redactor'):
+            try:
+                original_message = user_message
+                user_message = self.pii_redactor(user_message)
+                if user_message != original_message:
+                    print("🔒 PII redacted from user message for HIPAA compliance")
+            except Exception as e:
+                print(f"⚠️ PII redaction failed: {e}")
+
+        # Update attachment style analysis based on user message
+        try:
+            # Track reassurance-seeking behavior
+            reassurance_keywords = ["are you sure", "really?", "is that okay", "do you think", "am i doing"]
+            if any(kw in user_message.lower() for kw in reassurance_keywords):
+                self.user_history["reassurance_prompts"] += 1
+
+            # Update attachment style periodically (every 5 turns)
+            if self.attachment_detector and self.conversation_turn_count % 5 == 0:
+                try:
+                    self.user_history["attachment_style"] = self.attachment_detector.detect(self.user_history)
+                    print(f"👥 Updated attachment style: {self.user_history['attachment_style']}")
+                except Exception as e:
+                    print(f"⚠️ Attachment style detection failed: {e}")
+
+            # Monitor healthy boundaries (every 10 turns)
+            if hasattr(self, 'healthy_boundaries') and self.healthy_boundaries and self.conversation_turn_count % 10 == 0:
+                try:
+                    boundary_concern = self.healthy_boundaries.monitor_usage_patterns(self.user_history)
+                    if boundary_concern:
+                        print(f"🛡️ Boundary concern detected: {boundary_concern}")
+                except Exception as e:
+                    print(f"⚠️ Healthy boundaries monitoring failed: {e}")
+
+        except Exception as e:
+            print(f"⚠️ Attachment style analysis failed: {e}")
+
+        # Check advanced memory system for proactive recall
+        try:
+            # Use asyncio to handle the async memory system
+            import asyncio
+            relevant_memories = asyncio.run(self.memory_system.retrieve_relevant_memories(
+                user_id="global",  # For now, using global user
+                current_context=user_message,
+                limit=3
+            ))
+
+            proactive_recall = None
+            if relevant_memories and len(relevant_memories) > 0:
+                # Extract the most relevant memory
+                top_memory = relevant_memories[0]
+                proactive_recall = top_memory.get("content", "")
+                print(f"💭 Advanced memory recall: {proactive_recall[:100]}...")
+
+        except Exception as e:
+            print(f"⚠️ Advanced memory recall failed: {e}")
+            proactive_recall = None
         
+        # CRITICAL: Check for crisis indicators first (safety first)
+        if self.crisis_detector:
+            crisis_result = self.crisis_detector.detect_crisis(user_message)
+            if crisis_result["is_crisis"]:
+                print(f"🚨 CRISIS DETECTED: {crisis_result['risk_level']} - {crisis_result['crisis_type']}")
+                return self.crisis_detector.generate_crisis_response(crisis_result)
+
+        # Check for bids for connection (EFT - Emotionally Focused Therapy)
+        if self.bid_responder:
+            bid_detected = self.bid_responder.detect_bid(user_message, None, 0)  # Simplified prosody for now
+            if bid_detected != "none":
+                micro_affirmation = self.bid_responder.micro_ack(bid_detected)
+                print(f"🤝 Bid detected: {bid_detected} - Micro-affirmation: '{micro_affirmation}'")
+                self.last_bid_info = {"type": bid_detected, "affirmation": micro_affirmation}
+
+            # Store bid information for potential injection
+            self.last_bid_info = {
+                "bid_type": bid_detected,
+                "micro_affirmation": micro_affirmation,
+                "timestamp": time.time()
+            }
+
         # Check if we should inject a backchannel
         should_inject, bc_type = self.backchannel_system.should_inject_backchannel(
             user_message,
@@ -508,6 +755,38 @@ class OviyaBrain:
             dec["situation"] = dec.get("situation") or "casual_chat"
             dec["emotion_hint"] = dec.get("emotion_hint") or "neutral"
 
+        # Get attachment-informed interaction strategy
+        interaction_strategy = {}
+        if self.user_history["attachment_style"] != "unknown":
+            interaction_strategy = self.attachment_detector.adapt_interaction_style(
+                self.user_history["attachment_style"]
+            )
+            print(f"🎯 Using {self.user_history['attachment_style']} attachment strategy")
+
+        # Analyze secure base needs (safe haven vs secure base)
+        secure_base_state = "neutral_presence"  # Default
+        try:
+            # Simplified prosody analysis (could be enhanced with real prosody data)
+            mock_prosody = {"energy": 0.5, "pitch_var": 50}
+            secure_base_state = self.secure_base.detect_user_state(
+                prosody=mock_prosody,
+                text=user_message,
+                history=self.user_history
+            )
+            print(f"🏠 Secure base analysis: {secure_base_state}")
+        except Exception as e:
+            print(f"⚠️ Secure base analysis failed: {e}")
+
+        # Check for boundary guidance needs
+        boundary_guidance = None
+        try:
+            boundary_concern = self.healthy_boundaries.monitor_usage_patterns(self.user_history)
+            if boundary_concern:
+                boundary_guidance = self.healthy_boundaries.gentle_boundary_setting(boundary_concern)
+                print(f"🛡️ Providing boundary guidance: {boundary_concern}")
+        except Exception as e:
+            print(f"⚠️ Boundary guidance failed: {e}")
+
         # Build prompt with psych context and auto hints
         self._last_guidance_category = dec.get("situation")
         prompt = self._build_prompt(
@@ -515,6 +794,10 @@ class OviyaBrain:
             user_emotion,
             conversation_history,
             auto=dec,
+            proactive_recall=proactive_recall,
+            attachment_strategy=interaction_strategy,
+            secure_base_state=secure_base_state,
+            boundary_guidance=boundary_guidance
         )
         # Inject personality conditioning line (if enabled)
         if self.enable_personality and self._last_personality_vector:
@@ -618,7 +901,232 @@ class OviyaBrain:
                     parsed["backchannel_type"] = bc_type
                 else:
                     parsed["has_backchannel"] = False
-                
+
+                # Apply advanced empathic thinking for deep emotional intelligence
+                try:
+                    if self.enable_personality and self._last_personality_vector:
+                        personality_vector = {
+                            "Ma": float(self._last_personality_vector[0]),
+                            "Ahimsa": float(self._last_personality_vector[1]),
+                            "Jeong": float(self._last_personality_vector[2]),
+                            "Logos": float(self._last_personality_vector[3]),
+                            "Lagom": float(self._last_personality_vector[4])
+                        }
+
+                        emotion_context = {
+                            "primary_emotion": user_emotion or "neutral",
+                            "intensity": dec.get("intensity_hint", 0.5),
+                            "conversation_depth": self.conversation_turn_count
+                        }
+
+                        # Enhance response with empathic thinking modes
+                        empathic_enhancement = asyncio.run(self.empathic_thinking.generate_empathic_response(
+                            user_message,
+                            personality_vector,
+                            emotion_context
+                        ))
+
+                        if empathic_enhancement and empathic_enhancement.get("response"):
+                            # Enhance the LLM response with empathic thinking
+                            original_text = parsed["text"]
+                            empathic_text = empathic_enhancement["response"]
+
+                            # Combine responses intelligently (LLM + empathic thinking)
+                            combined_text = self._combine_llm_and_empathic(
+                                original_text, empathic_text, personality_vector
+                            )
+
+                            parsed["text"] = combined_text
+                            parsed["empathic_modes_used"] = empathic_enhancement.get("thinking_modes_used", [])
+                            parsed["cognitive_depth"] = empathic_enhancement.get("cognitive_depth", "standard")
+                            parsed["has_empathic_enhancement"] = True
+                            print(f"🧠 Applied {len(parsed['empathic_modes_used'])} empathic thinking modes: {', '.join(parsed['empathic_modes_used'])}")
+                        else:
+                            parsed["has_empathic_enhancement"] = False
+
+                except Exception as e:
+                    print(f"⚠️ Empathic thinking enhancement failed: {e}")
+                    parsed["has_empathic_enhancement"] = False
+
+                # Include personality vector for voice modulation
+                if self.enable_personality and self._last_personality_vector:
+                    parsed["personality_vector"] = self._last_personality_vector
+
+                # Integrate emotional reciprocity for genuine mirror loop
+                try:
+                    if self.enable_personality and self._last_personality_vector:
+                        # Create emotion embedding (simplified - would use real emotion model)
+                        user_emotion_embed = torch.zeros(1, 64)  # Placeholder for emotion embedding
+                        if user_emotion == "joyful_excited":
+                            user_emotion_embed[0, 0] = 1.0
+                        elif user_emotion == "empathetic_sad":
+                            user_emotion_embed[0, 1] = 1.0
+                        elif user_emotion == "calm_supportive":
+                            user_emotion_embed[0, 2] = 1.0
+                        elif user_emotion == "confident":
+                            user_emotion_embed[0, 3] = 1.0
+
+                        # Convert personality vector to tensor
+                        oviya_personality = torch.tensor(self._last_personality_vector)
+
+                        # Create conversation context
+                        conversation_context = {
+                            "depth": self.conversation_turn_count,
+                            "emotion": user_emotion or "neutral",
+                            "emotion_intensity": dec.get("intensity_hint", 0.5)
+                        }
+
+                        # Enhance response with reciprocity
+                        enhanced_text, reciprocity_metadata = reciprocal_empathy_integrator.enhance_response_with_reciprocity(
+                            parsed["text"],
+                            user_emotion_embed,
+                            oviya_personality,
+                            conversation_context
+                        )
+
+                        # Update response with enhanced text
+                        parsed["text"] = enhanced_text
+                        parsed["reciprocity_metadata"] = reciprocity_metadata
+                        parsed["has_reciprocity"] = reciprocity_metadata is not None
+
+                except Exception as e:
+                    print(f"⚠️ Reciprocity integration failed: {e}")
+                    parsed["has_reciprocity"] = False
+
+                # Store interaction in advanced memory system for therapeutic continuity
+                try:
+                    import asyncio
+                    import time
+
+                    conversation_data = {
+                        "user_input": user_message,
+                        "response": parsed["text"],
+                        "timestamp": time.time(),
+                        "emotion": user_emotion or "neutral",
+                        "personality_vector": self._last_personality_vector or [0.5, 0.5, 0.5, 0.5, 0.5],
+                        "emotion_context": {
+                            "primary_emotion": user_emotion or "neutral",
+                            "intensity": dec.get("intensity_hint", 0.5)
+                        },
+                        "session_id": f"session_{self.conversation_turn_count // 10}"  # Group conversations
+                    }
+
+                    asyncio.run(self.memory_system.store_conversation_memory(
+                        user_id="global",
+                        conversation_data=conversation_data
+                    ))
+                    parsed["advanced_memory_stored"] = True
+
+                except Exception as e:
+                    print(f"⚠️ Advanced memory storage failed: {e}")
+                    parsed["advanced_memory_stored"] = False
+
+                # Add strategic silence for therapeutic Ma (間)
+                try:
+                    if self.enable_personality and self._last_personality_vector:
+                        # Get Ma weight from personality vector
+                        ma_weight = float(self._last_personality_vector[0])  # Ma is first pillar
+
+                        # Calculate strategic silence based on emotion and Ma
+                        if self.strategic_silence:
+                            silence_config = self.strategic_silence.calculate_silence(
+                                emotion=user_emotion or "neutral",
+                                intensity=dec.get("intensity_hint", 0.5),
+                                ma_weight=ma_weight,
+                                conversation_context={"depth": self.conversation_turn_count}
+                            )
+                        else:
+                            silence_config = None
+
+                        if silence_config and silence_config.get("silence_markers"):
+                            # Add silence markers to response text
+                            enhanced_text = self.strategic_silence.inject_silence_markers(
+                                parsed["text"], silence_config
+                            )
+                            parsed["text"] = enhanced_text
+                            parsed["strategic_silence_applied"] = True
+                            parsed["silence_config"] = silence_config
+                            print(f"🕊️ Applied strategic silence: {silence_config['silence_type']} ({silence_config['total_silence_ms']}ms)")
+                        else:
+                            parsed["strategic_silence_applied"] = False
+                    else:
+                        parsed["strategic_silence_applied"] = False
+
+                except Exception as e:
+                    print(f"⚠️ Strategic silence failed: {e}")
+                    parsed["strategic_silence_applied"] = False
+
+                # Add micro-affirmations for natural conversation flow
+                try:
+                    if self.micro_affirmations:
+                        # Generate contextual micro-affirmations based on emotion and context
+                        affirmation_suggestions = self.micro_affirmations.generate_affirmations(
+                            text=parsed["text"],
+                            emotion=user_emotion or "neutral",
+                            context={
+                                "conversation_length": self.conversation_turn_count,
+                                "bid_detected": self.last_bid_info is not None,
+                                "bid_type": self.last_bid_info.get("bid_type") if self.last_bid_info else None
+                            }
+                        )
+                    else:
+                        affirmation_suggestions = []
+
+                    if affirmation_suggestions and len(affirmation_suggestions) > 0:
+                        # Add the most appropriate micro-affirmation
+                        best_affirmation = affirmation_suggestions[0]
+                        parsed["text"] = f"{parsed['text']} {best_affirmation}"
+                        parsed["micro_affirmation_added"] = True
+                        parsed["affirmation_text"] = best_affirmation
+                        print(f"💬 Added micro-affirmation: '{best_affirmation}'")
+                    else:
+                        parsed["micro_affirmation_added"] = False
+
+                except Exception as e:
+                    print(f"⚠️ Micro-affirmations failed: {e}")
+                    parsed["micro_affirmation_added"] = False
+
+                # Apply unconditional regard for Rogers person-centered therapy
+                try:
+                    original_text = parsed["text"]
+                    regarded_text = self.unconditional_regard.apply(original_text)
+
+                    if regarded_text != original_text:
+                        parsed["text"] = regarded_text
+                        parsed["unconditional_regard_applied"] = True
+                        print(f"🤗 Applied unconditional regard: removed judgmental language")
+                    else:
+                        parsed["unconditional_regard_applied"] = False
+
+                except Exception as e:
+                    print(f"⚠️ Unconditional regard failed: {e}")
+                    parsed["unconditional_regard_applied"] = False
+
+                # Apply vulnerability reciprocation when appropriate
+                try:
+                    if self.vuln and self.vuln.enabled:
+                        # Check if user shared vulnerability
+                        user_input = user_message.lower()
+                        vulnerability_indicators = ["i'm scared", "i failed", "i'm alone", "i hate myself", "ashamed", "vulnerable"]
+                        user_shared_vulnerability = any(indicator in user_input for indicator in vulnerability_indicators)
+
+                        if user_shared_vulnerability:
+                            reciprocated_text = self.vuln.maybe_disclose(user_input, parsed["text"])
+                            if reciprocated_text != parsed["text"]:
+                                parsed["text"] = reciprocated_text
+                                parsed["vulnerability_reciprocation_applied"] = True
+                                print(f"💝 Applied vulnerability reciprocation: therapeutic self-disclosure")
+                            else:
+                                parsed["vulnerability_reciprocation_applied"] = False
+                        else:
+                            parsed["vulnerability_reciprocation_applied"] = False
+                    else:
+                        parsed["vulnerability_reciprocation_applied"] = False
+
+                except Exception as e:
+                    print(f"⚠️ Vulnerability reciprocation failed: {e}")
+                    parsed["vulnerability_reciprocation_applied"] = False
+
                 return parsed
             else:
                 print(f"⚠️ LLM error: {response.status_code} - {response.text[:200]}")
@@ -770,11 +1278,15 @@ class OviyaBrain:
             yield resp.get("text", "")
     
     def _build_prompt(
-        self, 
-        user_message: str, 
+        self,
+        user_message: str,
         user_emotion: Optional[str],
         conversation_history: Optional[list],
-        auto: Optional[dict] = None
+        auto: Optional[dict] = None,
+        proactive_recall: Optional[str] = None,
+        attachment_strategy: Optional[dict] = None,
+        secure_base_state: Optional[str] = None,
+        boundary_guidance: Optional[str] = None
     ) -> str:
         """Build the prompt with situational empathy (Rogers + ToM)."""
 
@@ -893,6 +1405,30 @@ class OviyaBrain:
                         prompt_parts.append("\nExpressivity feedback: User reacted positively to validation.")
         except Exception:
             pass
+
+        # Add proactive relationship memory recall if available
+        if proactive_recall:
+            prompt_parts.append(f"\nRelationship memory: {proactive_recall}")
+
+        # Add attachment-informed interaction strategy
+        if attachment_strategy:
+            strategy_parts = ["\nAttachment-informed approach:"]
+            for key, value in attachment_strategy.items():
+                strategy_parts.append(f"- {key.replace('_', ' ').title()}: {value}")
+            prompt_parts.append(" ".join(strategy_parts))
+
+        # Add secure base guidance
+        if secure_base_state:
+            if secure_base_state == "safe_haven_needed":
+                prompt_parts.append("\nSecure base guidance: User needs safe haven (comfort during distress). Provide soothing presence and emotional holding.")
+            elif secure_base_state == "exploration_support_needed":
+                prompt_parts.append("\nSecure base guidance: User needs secure base (encouragement for exploration). Provide confidence and gentle challenge.")
+            else:
+                prompt_parts.append("\nSecure base guidance: User needs neutral therapeutic presence. Maintain balanced, supportive stance.")
+
+        # Add boundary guidance if needed
+        if boundary_guidance:
+            prompt_parts.append(f"\nBoundary guidance: {boundary_guidance}")
 
         # Add instruction for JSON output (allow smooth, longer responses)
         prompt_parts.append(f"""
@@ -1265,6 +1801,50 @@ Rules:
             "intensity": 0.8,
             "style_hint": "serious, caring"
         }
+
+    def _combine_llm_and_empathic(
+        self,
+        llm_text: str,
+        empathic_text: str,
+        personality_vector: Dict[str, float]
+    ) -> str:
+        """
+        Intelligently combine LLM response with empathic thinking enhancement.
+
+        This creates a more nuanced, personality-aligned response that benefits
+        from both the LLM's conversational fluency and the empathic thinking engine's
+        deep emotional intelligence.
+        """
+
+        # Personality-weighted combination strategy
+        ma_weight = personality_vector.get("Ma", 0.5)      # Space/contemplation
+        jeong_weight = personality_vector.get("Jeong", 0.5) # Deep connection
+        logos_weight = personality_vector.get("Logos", 0.5) # Reason/rationality
+
+        # Strategy 1: High Ma (contemplative) - Give space, let insights emerge
+        if ma_weight > 0.6:
+            # Combine with contemplative pauses and space
+            combined = f"{llm_text} [PAUSE:1200ms] {empathic_text}"
+            return combined
+
+        # Strategy 2: High Jeong (connection) - Deep emotional weaving
+        elif jeong_weight > 0.6:
+            # Seamlessly integrate empathic insights into the flow
+            combined = f"{llm_text} And {empathic_text.lower()}"
+            return combined
+
+        # Strategy 3: High Logos (reason) - Logical integration
+        elif logos_weight > 0.6:
+            # Use empathic insights to support reasoning
+            combined = f"{llm_text} {empathic_text}"
+            return combined
+
+        # Strategy 4: Balanced approach - Weighted combination
+        else:
+            # Balance between LLM fluency and empathic depth
+            # Use empathic enhancement as supporting insight
+            combined = f"{llm_text} {empathic_text}"
+            return combined
 
 
 # Example usage

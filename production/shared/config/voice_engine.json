@@ -1,0 +1,71 @@
+{
+  "voice_engine": {
+    "default_engine": "auto",
+    "csm": {
+      "url": "http://localhost:6006/generate",
+      "timeout": 30,
+      "preferred_for": [
+        "conversational_context",
+        "empathetic_sad",
+        "calm_supportive"
+      ]
+    },
+    "openvoice": {
+      "model_path": "external/OpenVoice/models/OpenVoiceV2",
+      "preferred_for": [
+        "voice_cloning",
+        "joyful_excited",
+        "playful"
+      ]
+    },
+    "auto_selection": {
+      "conversation_context_weight": 0.8,
+      "emotion_preference": {
+        "calm_supportive": "csm",
+        "empathetic_sad": "csm",
+        "joyful_excited": "openvoice",
+        "playful": "openvoice",
+        "confident": "auto",
+        "concerned_anxious": "csm",
+        "angry_firm": "auto",
+        "neutral": "auto"
+      }
+    }
+  },
+  "csm_mapping": {
+    "temperature_mapping": {
+      "calm_supportive": 0.7,
+      "empathetic_sad": 0.6,
+      "joyful_excited": 0.8,
+      "playful": 0.9,
+      "confident": 0.7,
+      "concerned_anxious": 0.6,
+      "angry_firm": 0.8,
+      "neutral": 0.7
+    },
+    "default_params": {
+      "speaker_id": 0,
+      "max_audio_length_ms": 10000,
+      "topk": 50
+    }
+  },
+  "openvoice_mapping": {
+    "voice_cloning": {
+      "enabled": true,
+      "reference_audio_path": "data/voice_samples/oviya_sample.wav",
+      "speaker_name": "oviya"
+    },
+    "emotion_style_tokens": {
+      "calm_supportive": "#calm",
+      "empathetic_sad": "#sad",
+      "joyful_excited": "#joy",
+      "playful": "#playful",
+      "confident": "#confident",
+      "concerned_anxious": "#anxious",
+      "angry_firm": "#firm",
+      "neutral": "#neutral"
+    }
+  }
+}
+
+
