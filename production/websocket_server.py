@@ -82,28 +82,100 @@ except Exception:
     STT_LATENCY = LLM_LATENCY = TTS_LATENCY = TIME_TO_FIRST_AUDIO = None
     STT_H = LLM_H = TTS_H = TTFB_H = ERRORS = None
 
-# Import Oviya components
-# from .voice.realtime_input import RealTimeVoiceInput  # Local WhisperX processing - disabled for now
-from .emotion_detector.detector import EmotionDetector
-from .brain.llm_brain import OviyaBrain
-from .brain.secure_base import SecureBaseSystem
-from .brain.bids import BidResponseSystem
-from .emotion_controller.controller import EmotionController
-from .voice.openvoice_tts import HybridVoiceEngine
-from .voice.csm_1b_client import CSM1BClient
-from .voice.csm_1b_stream import CSMRVQStreamer, BatchedCSMStreamer, get_batched_streamer
-from .voice.csm_1b_generator_optimized import OptimizedCSMStreamer, get_optimized_streamer
-from core.voice.acoustic_emotion_detector import AcousticEmotionDetector
-from .brain.personality_store import PersonalityStore
-from .config.service_urls import OLLAMA_URL, CSM_URL
-from faster_whisper import WhisperModel
+# Import Oviya components with fail-safe
+try:
+    from .emotion_detector.detector import EmotionDetector
+except ImportError:
+    EmotionDetector = None
 
-# Import MCP systems
-from .brain.mcp_memory_integration import OviyaMemorySystem
-from .brain.crisis_detection import CrisisDetectionSystem
-from .brain.empathic_thinking import EmpathicThinkingEngine
-from .brain.emotional_reciprocity import reciprocal_empathy_integrator
-from .voice.strategic_silence import strategic_silence_manager, emotional_pacing_controller
+try:
+    from .brain.llm_brain import OviyaBrain
+except ImportError:
+    OviyaBrain = None
+
+try:
+    from .brain.secure_base import SecureBaseSystem
+except ImportError:
+    SecureBaseSystem = None
+
+try:
+    from .brain.bids import BidResponseSystem
+except ImportError:
+    BidResponseSystem = None
+
+try:
+    from .emotion_controller.controller import EmotionController
+except ImportError:
+    EmotionController = None
+
+try:
+    from .voice.openvoice_tts import HybridVoiceEngine
+except ImportError:
+    HybridVoiceEngine = None
+
+try:
+    from .voice.csm_1b_client import CSM1BClient
+except ImportError:
+    CSM1BClient = None
+
+try:
+    from .voice.csm_1b_stream import CSMRVQStreamer, BatchedCSMStreamer, get_batched_streamer
+except ImportError:
+    CSMRVQStreamer = None
+    BatchedCSMStreamer = None
+    get_batched_streamer = None
+try:
+    from .voice.csm_1b_generator_optimized import OptimizedCSMStreamer, get_optimized_streamer
+except ImportError:
+    OptimizedCSMStreamer = None
+    get_optimized_streamer = None
+
+try:
+    from core.voice.acoustic_emotion_detector import AcousticEmotionDetector
+except ImportError:
+    AcousticEmotionDetector = None
+
+try:
+    from .brain.personality_store import PersonalityStore
+except ImportError:
+    PersonalityStore = None
+
+try:
+    from .config.service_urls import OLLAMA_URL, CSM_URL
+except ImportError:
+    OLLAMA_URL = "http://localhost:11434"
+    CSM_URL = "http://localhost:8001"
+
+try:
+    from faster_whisper import WhisperModel
+except ImportError:
+    WhisperModel = None
+
+# Import MCP systems with fail-safe
+try:
+    from .brain.mcp_memory_integration import OviyaMemorySystem
+except ImportError:
+    OviyaMemorySystem = None
+
+try:
+    from .brain.crisis_detection import CrisisDetectionSystem
+except ImportError:
+    CrisisDetectionSystem = None
+
+try:
+    from .brain.empathic_thinking import EmpathicThinkingEngine
+except ImportError:
+    EmpathicThinkingEngine = None
+try:
+    from .brain.emotional_reciprocity import reciprocal_empathy_integrator
+except ImportError:
+    reciprocal_empathy_integrator = None
+
+try:
+    from .voice.strategic_silence import strategic_silence_manager, emotional_pacing_controller
+except ImportError:
+    strategic_silence_manager = None
+    emotional_pacing_controller = None
 
 import time
 
@@ -188,7 +260,7 @@ async def startup_event():
         asyncio.create_task(_cleanup_loop())
 
 # Global instances (in production, use dependency injection)
-personality_store = PersonalityStore()
+personality_store = PersonalityStore() if PersonalityStore else None
 
 # Global model instances (shared across sessions for faster startup)
 _global_voice_input = None
@@ -198,15 +270,35 @@ _global_acoustic_emotion = None
 def get_global_models():
     """Initialize and return global model instances"""
     global _global_voice_input, _global_emotion_detector, _global_acoustic_emotion
-    
+
     if _global_voice_input is None:
         print("🎤 Initializing global models (one-time setup)...")
-        _global_voice_input = RealTimeVoiceInput(enable_diarization=False)
-        _global_voice_input.initialize_models()
-        _global_emotion_detector = EmotionDetector()
-        _global_acoustic_emotion = AcousticEmotionDetector()
-        print("✅ Global models initialized")
-    
+
+        # Initialize voice input if available
+        if hasattr(__import__('sys').modules[__name__], 'RealTimeVoiceInput') and 'RealTimeVoiceInput' in globals():
+            _global_voice_input = RealTimeVoiceInput(enable_diarization=False)
+            if hasattr(_global_voice_input, 'initialize_models'):
+                _global_voice_input.initialize_models()
+        else:
+            _global_voice_input = None
+            print("⚠️ RealTimeVoiceInput not available")
+
+        # Initialize emotion detector if available
+        if EmotionDetector:
+            _global_emotion_detector = EmotionDetector()
+        else:
+            _global_emotion_detector = None
+            print("⚠️ EmotionDetector not available")
+
+        # Initialize acoustic emotion detector if available
+        if AcousticEmotionDetector:
+            _global_acoustic_emotion = AcousticEmotionDetector()
+        else:
+            _global_acoustic_emotion = None
+            print("⚠️ AcousticEmotionDetector not available")
+
+        print("✅ Global models initialization completed")
+
     return _global_voice_input, _global_emotion_detector, _global_acoustic_emotion
 
 

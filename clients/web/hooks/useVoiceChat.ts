@@ -45,7 +45,7 @@ export const useVoiceChat = (): VoiceChatState => {
   const connect = () => {
     if (socketRef.current?.connected) return
     
-    const socket = io(process.env.NEXT_PUBLIC_ORCHESTRATOR_URL || 'http://localhost:8002', {
+    const socket = io(process.env.NEXT_PUBLIC_ORCHESTRATOR_URL || 'http://localhost:8000', {
       transports: ['websocket'],
       timeout: 10000,
       reconnection: true,
