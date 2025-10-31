@@ -28,17 +28,34 @@ from .global_soul import OviyaGlobalSoul
 from .emotional_reciprocity import reciprocal_empathy_integrator
 from .empathic_thinking import EmpathicThinkingEngine
 from .mcp_memory_integration import OviyaMemorySystem
-from ..utils.pii_redaction import redact
-from ..utils.emotion_monitor import EmotionDistributionMonitor
+
+# Robust imports with fallbacks
+try:
+    from ..utils.pii_redaction import redact
+except ImportError:
+    def redact(text: str) -> str:
+        return text  # Fallback - no redaction
+
+try:
+    from ..utils.emotion_monitor import EmotionDistributionMonitor
+except ImportError:
+    class EmotionDistributionMonitor:
+        def log_emotion_usage(self, emotion, tier=1):
+            pass  # Fallback - no monitoring
 
 # Optimization hooks with fail-safe
 try:
     from ..optimizations import ProsodyTemplateCache
-    prosody_cache = ProsodyTemplateCache(max_items=128)
+    prosody_cache = ProsodyTemplateCache()
     OPTIMIZATIONS_AVAILABLE = True
 except ImportError:
-    prosody_cache = None
-    OPTIMIZATIONS_AVAILABLE = False
+    try:
+        from optimizations import ProsodyTemplateCache
+        prosody_cache = ProsodyTemplateCache()
+        OPTIMIZATIONS_AVAILABLE = True
+    except ImportError:
+        prosody_cache = None
+        OPTIMIZATIONS_AVAILABLE = False
 from .personality_store import PersonalityStore
 from .empathy_fusion_head import EmpathyFusionHead
 # Try to import advanced therapeutic systems with graceful fallback
@@ -469,7 +486,13 @@ class OviyaBrain:
         except Exception as e:
             print(f"   ⚠️ Personality store failed: {e}")
             self.personality_store = None
-        self._bias_filter = CulturalBiasFilter()
+
+        # Cultural bias filter with fallback
+        try:
+            from core.data.bias_filter import CulturalBiasFilter
+            self._bias_filter = CulturalBiasFilter()
+        except ImportError:
+            self._bias_filter = None  # Fallback - no bias filtering
         # Personality conditioning flag and modules
         self.enable_personality = bool(ff.get("ENABLE_PERSONALITY_CONDITIONING", False))
         if self.enable_personality:

@@ -1,5 +1,5 @@
 {
-  "timestamp": 1761905013.853536,
+  "timestamp": 1761906699.90751,
   "test_suites_run": [
     {
       "suite": "beyond_maya_enhancements",
@@ -28,14 +28,14 @@
     {
       "suite": "realtime_performance",
       "status": "passed",
-      "avg_latency_ms": 93.13125041097352,
-      "max_latency_ms": 142.80315216816354
+      "avg_latency_ms": 86.38828546349819,
+      "max_latency_ms": 149.3413130920454
     }
   ],
   "overall_status": "needs_improvement",
   "integrated_systems_tested": 0,
   "performance_metrics": {
-    "total_test_time_seconds": 0.005171060562133789,
+    "total_test_time_seconds": 0.0019478797912597656,
     "test_suites_completed": 5,
     "test_suites_passed": 1,
     "integrated_systems_validated": 30
@@ -112,9 +112,9 @@
     },
     "realtime_tests": {
       "status": "passed",
-      "avg_latency": 93.13125041097352,
-      "max_latency": 142.80315216816354,
-      "min_latency": 58.44562615051042,
+      "avg_latency": 86.38828546349819,
+      "max_latency": 149.3413130920454,
+      "min_latency": 56.196543128979556,
       "performance_target_met": true,
       "samples_tested": 10,
       "target_avg_ms": 100,
