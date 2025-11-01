@@ -84,6 +84,14 @@ app.add_middleware(
 )
 
 
+# Import unified VAD+STT pipeline
+try:
+    from .voice.unified_vad_stt import UnifiedVADSTTPipeline, get_unified_pipeline
+    _HAS_UNIFIED_VAD_STT = True
+except Exception:
+    _HAS_UNIFIED_VAD_STT = False
+
+# Legacy SileroVAD class - kept for fallback compatibility
 class SileroVAD:
     """
     ChatGPT-level Voice Activity Detection
@@ -420,9 +428,20 @@ class OviyaVoiceConnection:
     
     def __init__(self, pc: RTCPeerConnection):
         self.pc = pc
-        self.vad = SileroVAD()
+        
+        # Use unified VAD+STT pipeline if available
+        if _HAS_UNIFIED_VAD_STT:
+            self.vad_stt_pipeline = get_unified_pipeline()
+            print("✅ Using unified VAD+STT pipeline")
+            self.vad = None  # Not needed when using unified pipeline
+        else:
+            # Legacy fallback
+            self.vad = SileroVAD()
+            self.vad_stt_pipeline = None
+            print("⚠️ Using legacy VAD implementation")
+        
         self.whisperx = RemoteWhisperXClient()
-        # Local Whisper Turbo for low-latency STT
+        # Local Whisper Turbo for low-latency STT (fallback)
         try:
             self.whisper_turbo = WhisperTurboClient()
         except Exception:
@@ -471,7 +490,8 @@ class OviyaVoiceConnection:
         # Basic preprocessing: high-pass filter + light noise reduction + RMS normalization
         try:
             # High-pass at ~80 Hz to remove rumble
-            b, a = torchaudio.functional.highpass_biquad(torch.tensor(audio_data), self.vad.sample_rate, 80)
+            sample_rate = 16000  # Standard sample rate for WebRTC audio
+            b, a = torchaudio.functional.highpass_biquad(torch.tensor(audio_data), sample_rate, 80)
             audio_data = b.numpy() if hasattr(b, 'numpy') else audio_data
         except Exception:
             pass
@@ -507,28 +527,66 @@ class OviyaVoiceConnection:
         except Exception:
             pass
         
-        # Run VAD
-        is_speech, end_of_speech, audio_to_process = self.vad.process_chunk(audio_data)
-        
-        # User started speaking - interrupt Oviya if needed
-        if is_speech and self.is_processing:
-            self.interrupt_requested = True
-            print("🚫 User interrupted Oviya")
-            # Begin server-side fade-out and purge queue to stop quickly
-            try:
-                self.audio_output_track.start_fade_out(duration_ms=500)
-                self.audio_output_track.clear_queue()
-            except Exception as _e:
-                pass
-        
-        # User stopped speaking - transcribe and respond
-        if end_of_speech and audio_to_process is not None and len(audio_to_process) > 0:
-            print(f"🎤 Processing {len(audio_to_process)/16000:.2f}s of audio")
-            asyncio.create_task(self.handle_user_utterance(audio_to_process))
+        # Run VAD using unified pipeline or legacy
+        if self.vad_stt_pipeline:
+            # Use unified VAD+STT pipeline
+            result = await self.vad_stt_pipeline.process_audio_chunk(audio_data)
+            
+            # Set AI speaking state for interrupt detection
+            self.vad_stt_pipeline.set_ai_speaking_state(self.is_processing)
+            
+            is_speech = result.get('is_speech', False)
+            end_of_speech = result.get('end_of_speech', False)
+            audio_to_process = result.get('audio_for_stt')
+            
+            # User started speaking - interrupt Oviya if needed
+            if is_speech and self.is_processing:
+                self.interrupt_requested = True
+                print("🚫 User interrupted Oviya")
+                # Begin server-side fade-out and purge queue to stop quickly
+                try:
+                    self.audio_output_track.start_fade_out(duration_ms=500)
+                    self.audio_output_track.clear_queue()
+                except Exception as _e:
+                    pass
+            
+            # User stopped speaking - transcribe and respond
+            if end_of_speech and audio_to_process is not None and len(audio_to_process) > 0:
+                print(f"🎤 Processing {len(audio_to_process)/16000:.2f}s of audio")
+                # Also get final transcription if available
+                final_text = result.get('final_text')
+                if final_text:
+                    # Use the transcription from unified pipeline
+                    asyncio.create_task(self.handle_user_utterance(audio_to_process, pre_transcribed=final_text))
+                else:
+                    asyncio.create_task(self.handle_user_utterance(audio_to_process))
+        else:
+            # Legacy VAD processing
+            is_speech, end_of_speech, audio_to_process = self.vad.process_chunk(audio_data)
+            
+            # User started speaking - interrupt Oviya if needed
+            if is_speech and self.is_processing:
+                self.interrupt_requested = True
+                print("🚫 User interrupted Oviya")
+                # Begin server-side fade-out and purge queue to stop quickly
+                try:
+                    self.audio_output_track.start_fade_out(duration_ms=500)
+                    self.audio_output_track.clear_queue()
+                except Exception as _e:
+                    pass
+            
+            # User stopped speaking - transcribe and respond
+            if end_of_speech and audio_to_process is not None and len(audio_to_process) > 0:
+                print(f"🎤 Processing {len(audio_to_process)/16000:.2f}s of audio")
+                asyncio.create_task(self.handle_user_utterance(audio_to_process))
     
-    async def handle_user_utterance(self, audio: np.ndarray):
+    async def handle_user_utterance(self, audio: np.ndarray, pre_transcribed: Optional[str] = None):
         """
         Complete turn: transcribe → think → speak
+        
+        Args:
+            audio: Audio array to transcribe
+            pre_transcribed: Optional pre-transcribed text (from unified pipeline)
         """
         if self.is_closed:
             print("⚠️  Connection closed, skipping...")
@@ -542,26 +600,34 @@ class OviyaVoiceConnection:
         start_time = time.time()
         
         try:
-            # 1. Transcribe with WhisperX (~200-400ms)
+            # 1. Transcribe (use pre-transcribed if available, otherwise use Whisper)
             print("🔍 Transcribing...")
             transcription = {"text": "", "words": [], "processing_time": 0}
-            # Prefer local Whisper Turbo if available
-            if self.whisper_turbo is not None:
-                try:
-                    # audio is float32 0..1 at 16kHz
+            
+            if pre_transcribed:
+                # Use transcription from unified pipeline
+                transcription["text"] = pre_transcribed
+                print(f"✅ Using unified pipeline transcription")
+            else:
+                # Fallback to Whisper (local or remote)
+                # Prefer local Whisper Turbo if available
+                if self.whisper_turbo is not None:
+                    try:
+                        # audio is float32 0..1 at 16kHz
+                        stt_t0 = time.time()
+                        result = await self.whisper_turbo.transcribe_audio(audio.astype(np.float32))
+                        if STT_LATENCY:
+                            STT_LATENCY.observe(time.time() - stt_t0)
+                        transcription["text"] = result.get("text", "")
+                    except Exception:
+                        pass
+                # Fallback to remote WhisperX
+                if not transcription["text"]:
                     stt_t0 = time.time()
-                    result = await self.whisper_turbo.transcribe_audio(audio.astype(np.float32))
+                    transcription = await self.whisperx.transcribe(audio)
                     if STT_LATENCY:
                         STT_LATENCY.observe(time.time() - stt_t0)
-                    transcription["text"] = result.get("text", "")
-                except Exception:
-                    pass
-            # Fallback to remote WhisperX
-            if not transcription["text"]:
-                stt_t0 = time.time()
-                transcription = await self.whisperx.transcribe(audio)
-                if STT_LATENCY:
-                    STT_LATENCY.observe(time.time() - stt_t0)
+            
             text = transcription["text"]
             
             if not text:

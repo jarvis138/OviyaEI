@@ -219,7 +219,8 @@ class CSM1BClient:
         conversation_context: Optional[List[Dict]] = None,
         reference_audio: Optional[np.ndarray] = None,
         use_hf_pipeline: Optional[bool] = None,
-        style_vec: Optional[List[float]] = None
+        style_vec: Optional[List[float]] = None,
+        prosody_params: Optional[Dict] = None  # 🆕 PROSODY: pitch_scale, rate_scale, energy_scale
     ) -> AsyncGenerator[np.ndarray, None]:
         """
         Generate audio with streaming for low latency
@@ -241,12 +242,12 @@ class CSM1BClient:
                 use_hf = use_hf_pipeline and HF_AVAILABLE
             if use_hf:
                 async for chunk in self._generate_hf_pipeline_streaming(
-                    text, emotion, speaker_id, conversation_context, reference_audio, style_vec
+                    text, emotion, speaker_id, conversation_context, reference_audio, style_vec, prosody_params
                 ):
                     yield chunk
             else:
                 async for chunk in self._generate_local_streaming(
-                    text, emotion, speaker_id, conversation_context, reference_audio, style_vec
+                    text, emotion, speaker_id, conversation_context, reference_audio, style_vec, prosody_params
                 ):
                     yield chunk
         else:
@@ -262,7 +263,8 @@ class CSM1BClient:
         speaker_id: int,
         conversation_context: Optional[List[Dict]],
         reference_audio: Optional[np.ndarray],
-        style_vec: Optional[List[float]]
+        style_vec: Optional[List[float]],
+        prosody_params: Optional[Dict] = None  # 🆕 PROSODY: pitch_scale, rate_scale, energy_scale
     ) -> AsyncGenerator[np.ndarray, None]:
         """
         Local streaming generation with RVQ → Mimi pipeline

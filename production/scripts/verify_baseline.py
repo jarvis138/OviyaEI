@@ -47,8 +47,7 @@ class BaselineVerifier:
             "brain/micro_affirmations.py",
 
             # Voice synthesis pipeline
-            "voice/csm_1b_generator_optimized.py",
-            "voice/csm_1b_stream.py",
+            "voice/csm_1b_stream.py",  # Updated: csm_1b_generator_optimized.py merged into csm_1b_stream.py
             "voice/csm_1b_client.py",
 
             # Safety & compliance

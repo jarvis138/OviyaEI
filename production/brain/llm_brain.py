@@ -13,6 +13,9 @@ from pathlib import Path
 import re
 import random
 from functools import lru_cache
+import numpy as np
+import torch
+import torch.nn as nn
 from .epistemic_prosody import EpistemicProsodyAnalyzer
 from .emotion_transitions import EmotionTransitionSmoother
 from .backchannels import BackchannelSystem
@@ -775,15 +778,80 @@ class OviyaBrain:
         # Compute personality vector p (Ma, Ahimsa, Jeong, Logos, Lagom)
         if self.enable_personality:
             try:
-                # rudimentary feature vectors (replace with real embeddings)
-                emo = torch.zeros(1, 8)
-                ctxv = torch.zeros(1, 16)
-                mem = torch.zeros(1, 4)
-                # bias a bit by situation/emotion
-                if dec.get("situation") == "difficult_news":
-                    emo[0, 0] = 1.0
-                if dec.get("emotion_hint") == "joyful_excited":
-                    emo[0, 1] = 1.0
+                # 🆕 REAL EMOTION EMBEDDINGS: Use EmotionEmbeddingGenerator instead of placeholder vectors
+                from .emotion_embeddings import get_emotion_embedding_generator
+                emotion_embed_gen = get_emotion_embedding_generator()
+                
+                # Extract real emotion embedding from user message
+                user_emotion_embed = emotion_embed_gen.extract_text_emotion_embedding(user_message)
+                # Project from 64-dim to 8-dim for fusion head
+                if not hasattr(self, '_emotion_projection'):
+                    self._emotion_projection = nn.Linear(user_emotion_embed.shape[-1], 8).to(user_emotion_embed.device)
+                emo = self._emotion_projection(user_emotion_embed)  # [1, 8]
+                
+                # Extract context embedding from conversation history
+                context_text = ""
+                if conversation_history:
+                    # Use last 3 turns as context
+                    recent_turns = conversation_history[-3:] if len(conversation_history) >= 3 else conversation_history
+                    context_text = " ".join([
+                        str(turn.get("text", turn.get("q", ""))) if isinstance(turn, dict) else str(turn)
+                        for turn in recent_turns
+                    ])
+                if not context_text:
+                    context_text = user_message  # Fallback to current message
+                
+                context_embed = emotion_embed_gen.extract_text_emotion_embedding(context_text)
+                # Project from 64-dim to 16-dim for fusion head
+                if not hasattr(self, '_context_projection'):
+                    self._context_projection = nn.Linear(context_embed.shape[-1], 16).to(context_embed.device)
+                ctxv = self._context_projection(context_embed)  # [1, 16]
+                
+                # Extract memory embedding from personality store / memory system
+                try:
+                    # Get conversation summary from memory system
+                    memory_text = ""
+                    if hasattr(self.memory_system, 'get_conversation_summary'):
+                        memory_text = asyncio.run(self.memory_system.get_conversation_summary("global", last_n=5))
+                    elif hasattr(self, 'personality_store'):
+                        memory_text = self.personality_store.get_conversation_summary("global", last_n=5)
+                    
+                    if memory_text:
+                        memory_embed = emotion_embed_gen.extract_text_emotion_embedding(memory_text)
+                    else:
+                        # Fallback: use user history summary
+                        history_summary = f"Emotions: {self.user_history.get('emotions', [])}"
+                        memory_embed = emotion_embed_gen.extract_text_emotion_embedding(history_summary)
+                except Exception as e:
+                    # Fallback: neutral memory embedding
+                    memory_embed = torch.zeros(1, emotion_embed_gen.embedding_dim).to(emo.device)
+                
+                # Project from 64-dim to 4-dim for fusion head
+                if not hasattr(self, '_memory_projection'):
+                    self._memory_projection = nn.Linear(memory_embed.shape[-1], 4).to(memory_embed.device)
+                mem = self._memory_projection(memory_embed)  # [1, 4]
+                
+                # Apply situation/emotion bias (enhance with real embeddings)
+                situation = dec.get("situation", "")
+                emotion_hint = dec.get("emotion_hint", "")
+                
+                # Enhance emotion embedding based on situation
+                if situation == "difficult_news":
+                    # Add negative bias to emotion embedding
+                    emo = emo - 0.3  # Shift toward more supportive/compassionate
+                elif situation == "success_celebration":
+                    emo = emo + 0.3  # Shift toward more joyful
+                
+                if emotion_hint == "joyful_excited":
+                    emo = emo + 0.2  # Enhance positive emotion
+                elif emotion_hint in ["sad", "anxious", "angry"]:
+                    emo = emo - 0.2  # Enhance supportive response
+                
+                # Normalize embeddings
+                emo = torch.nn.functional.normalize(emo, p=2, dim=-1)
+                ctxv = torch.nn.functional.normalize(ctxv, p=2, dim=-1)
+                mem = torch.nn.functional.normalize(mem, p=2, dim=-1)
+                
                 feats = {"emotion": emo, "context": ctxv, "memory": mem}
                 p = self._fusion(feats)[0]
                 p = self._p_ema.update(p)
@@ -794,7 +862,8 @@ class OviyaBrain:
                     VECTOR_ENTROPY.observe(ent)
                 except Exception:
                     pass
-            except Exception:
+            except Exception as e:
+                print(f"⚠️ Personality vector computation failed: {e}")
                 self._last_personality_vector = None
 
         # Low-confidence fallback to neutral context
@@ -813,16 +882,42 @@ class OviyaBrain:
         # Analyze secure base needs (safe haven vs secure base)
         secure_base_state = "neutral_presence"  # Default
         try:
-            # Simplified prosody analysis (could be enhanced with real prosody data)
-            mock_prosody = {"energy": 0.5, "pitch_var": 50}
+            # 🆕 REAL PROSODY DATA: Extract real prosody from emotion embeddings
+            from .emotion_embeddings import get_emotion_embedding_generator
+            emotion_embed_gen = get_emotion_embedding_generator()
+            
+            # Extract emotion embedding
+            user_emotion_embed = emotion_embed_gen.extract_text_emotion_embedding(user_message)
+            
+            # Convert to VAD dimensions (Valence, Arousal, Dominance)
+            vad_dict = emotion_embed_gen.embedding_to_vad(user_emotion_embed)
+            
+            # Map VAD to prosody features
+            real_prosody = {
+                "energy": vad_dict.get("arousal", 0.5),  # Arousal → energy
+                "pitch_var": abs(vad_dict.get("valence", 0.0)) * 100,  # Valence → pitch variation
+                "valence": vad_dict.get("valence", 0.0),
+                "dominance": vad_dict.get("dominance", 0.0)
+            }
+            
             secure_base_state = self.secure_base.detect_user_state(
-                prosody=mock_prosody,
+                prosody=real_prosody,
                 text=user_message,
                 history=self.user_history
             )
             print(f"🏠 Secure base analysis: {secure_base_state}")
         except Exception as e:
             print(f"⚠️ Secure base analysis failed: {e}")
+            # Fallback to mock prosody
+            try:
+                mock_prosody = {"energy": 0.5, "pitch_var": 50}
+                secure_base_state = self.secure_base.detect_user_state(
+                    prosody=mock_prosody,
+                    text=user_message,
+                    history=self.user_history
+                )
+            except Exception:
+                pass
 
         # Check for boundary guidance needs
         boundary_guidance = None
@@ -995,24 +1090,37 @@ class OviyaBrain:
                     print(f"⚠️ Empathic thinking enhancement failed: {e}")
                     parsed["has_empathic_enhancement"] = False
 
-                # Include personality vector for voice modulation
-                if self.enable_personality and self._last_personality_vector:
-                    parsed["personality_vector"] = self._last_personality_vector
+                # Always include personality vector for voice modulation (with default if not computed)
+                # 🆕 CSM-1B COMPATIBLE: Return dict format for prosody computation
+                if self._last_personality_vector:
+                    parsed["personality_vector"] = {
+                        "Ma": float(self._last_personality_vector[0]),
+                        "Ahimsa": float(self._last_personality_vector[1]),
+                        "Jeong": float(self._last_personality_vector[2]),
+                        "Logos": float(self._last_personality_vector[3]),
+                        "Lagom": float(self._last_personality_vector[4])
+                    }
+                else:
+                    parsed["personality_vector"] = {
+                        "Ma": 0.5,
+                        "Ahimsa": 0.5,
+                        "Jeong": 0.5,
+                        "Logos": 0.5,
+                        "Lagom": 0.5
+                    }
 
                 # Integrate emotional reciprocity for genuine mirror loop
                 try:
                     if self.enable_personality and self._last_personality_vector:
-                        # Create emotion embedding (simplified - would use real emotion model)
-                        user_emotion_embed = torch.zeros(1, 64)  # Placeholder for emotion embedding
-                        if user_emotion == "joyful_excited":
-                            user_emotion_embed[0, 0] = 1.0
-                        elif user_emotion == "empathetic_sad":
-                            user_emotion_embed[0, 1] = 1.0
-                        elif user_emotion == "calm_supportive":
-                            user_emotion_embed[0, 2] = 1.0
-                        elif user_emotion == "confident":
-                            user_emotion_embed[0, 3] = 1.0
-
+                        # 🆕 REAL EMOTION EMBEDDINGS: Use EmotionEmbeddingGenerator instead of placeholder
+                        from .emotion_embeddings import get_emotion_embedding_generator
+                        emotion_embed_gen = get_emotion_embedding_generator()
+                        
+                        # Extract real emotion embedding from text (and audio if available)
+                        user_emotion_embed = emotion_embed_gen.extract_text_emotion_embedding(
+                            user_message
+                        )
+                        
                         # Convert personality vector to tensor
                         oviya_personality = torch.tensor(self._last_personality_vector)
 
@@ -1050,7 +1158,19 @@ class OviyaBrain:
                         "response": parsed["text"],
                         "timestamp": time.time(),
                         "emotion": user_emotion or "neutral",
-                        "personality_vector": self._last_personality_vector or [0.5, 0.5, 0.5, 0.5, 0.5],
+                        "personality_vector": {
+                            "Ma": float(self._last_personality_vector[0]),
+                            "Ahimsa": float(self._last_personality_vector[1]),
+                            "Jeong": float(self._last_personality_vector[2]),
+                            "Logos": float(self._last_personality_vector[3]),
+                            "Lagom": float(self._last_personality_vector[4])
+                        } if self._last_personality_vector else {
+                            "Ma": 0.5,
+                            "Ahimsa": 0.5,
+                            "Jeong": 0.5,
+                            "Logos": 0.5,
+                            "Lagom": 0.5
+                        },
                         "emotion_context": {
                             "primary_emotion": user_emotion or "neutral",
                             "intensity": dec.get("intensity_hint", 0.5)
@@ -1189,11 +1309,24 @@ class OviyaBrain:
                     )
                     if simple_response.status_code == 200:
                         text = simple_response.json().get("response", "")
-                        return {
-                            "text": text,
-                            "emotion": user_emotion or "neutral",
-                            "intensity": 0.5
+                    return {
+                        "text": text,
+                        "emotion": user_emotion or "neutral",
+                        "intensity": 0.5,
+                        "personality_vector": {
+                            "Ma": float(self._last_personality_vector[0]),
+                            "Ahimsa": float(self._last_personality_vector[1]),
+                            "Jeong": float(self._last_personality_vector[2]),
+                            "Logos": float(self._last_personality_vector[3]),
+                            "Lagom": float(self._last_personality_vector[4])
+                        } if self._last_personality_vector else {
+                            "Ma": 0.5,
+                            "Ahimsa": 0.5,
+                            "Jeong": 0.5,
+                            "Logos": 0.5,
+                            "Lagom": 0.5
                         }
+                    }
                 except:
                     pass
                 # Last resort: mock response
@@ -1418,6 +1551,27 @@ class OviyaBrain:
 
         # Add Rogers + ToM framing
         prompt_parts.append("Empathy Framework:\n- Rogers: paraphrase essence with as-if quality\n- ToM: infer intentions, knowledge gaps, needs\n- Situational: validate → support → guide (context-first)")
+        
+        # 🆕 DOCUMENTED: 18 Therapeutic Frameworks Integration
+        # These frameworks are integrated throughout the system:
+        # 1. EFT (Emotionally Focused Therapy) - BidResponseSystem
+        # 2. Rogerian (Person-Centered) - Unconditional Positive Regard, Empathic Paraphrasing
+        # 3. CBT (Cognitive Behavioral Therapy) - Cognitive reframing in prompts
+        # 4. DBT (Dialectical Behavior Therapy) - Validation strategies, distress tolerance
+        # 5. Attachment Theory - AttachmentStyleDetector, Secure Base
+        # 6. Theory of Mind (ToM) - Explicit intention inference
+        # 7. Unconditional Positive Regard - UnconditionalRegardEngine
+        # 8. Secure Base Theory - SecureBaseSystem
+        # 9. Vulnerability Reciprocation - VulnerabilityReciprocationSystem
+        # 10. Strategic Silence (Ma - 間) - Therapeutic pauses
+        # 11. Empathic Thinking - EmpathicThinkingEngine
+        # 12. Emotional Reciprocity - EmotionalReciprocityEngine
+        # 13. Crisis Intervention - CrisisDetectionSystem
+        # 14. Micro-Affirmations - MicroAffirmationGenerator
+        # 15. Healthy Boundaries - Boundary enforcement
+        # 16. Epistemic Prosody - Cognitive uncertainty handling
+        # 17. Emotion Transition Smoothing - EmotionTransitionSmoother
+        # 18. Backchannel System - Active listening cues
 
         # Add situation context and guidance
         prompt_parts.append(f"\nSituation: {situation}")
@@ -1434,11 +1588,24 @@ class OviyaBrain:
         if user_emotion:
             prompt_parts.append(f"\nDetected emotion (context only, do NOT label it back): {user_emotion}")
 
-        # Add conversation history if available
+        # Add conversation history if available (handle both string and dict formats)
         if conversation_history and len(conversation_history) > 0:
             prompt_parts.append("\nRecent conversation:")
             for turn in conversation_history[-3:]:
-                prompt_parts.append(f"  {turn}")
+                # Handle different conversation history formats
+                if isinstance(turn, dict):
+                    # Extract text from dict format
+                    text = turn.get('text', turn.get('q', turn.get('r', str(turn))))
+                    speaker = turn.get('speaker_id', turn.get('speaker', 'Unknown'))
+                    if isinstance(speaker, int):
+                        speaker_label = "User" if speaker == 1 else "Oviya"
+                    else:
+                        speaker_label = str(speaker)
+                    prompt_parts.append(f"  {speaker_label}: {text}")
+                elif isinstance(turn, str):
+                    prompt_parts.append(f"  {turn}")
+                else:
+                    prompt_parts.append(f"  {str(turn)}")
 
         # Expressivity feedback loop (simple):
         # If last user turn was continuation after our validation-first phrasing,
@@ -1501,6 +1668,281 @@ Rules:
 
         return "\n".join(prompt_parts)
     
+    def map_emotion_to_csm_format(self, emotion: str) -> str:
+        """
+        Map Oviya's emotion format to CSM-1B compatible format
+        
+        CSM-1B uses simpler emotion tokens, so we map Oviya's 
+        detailed emotions to CSM-compatible ones.
+        
+        Args:
+            emotion: Oviya's emotion string (e.g., "calm_supportive")
+            
+        Returns:
+            CSM-1B compatible emotion string
+        """
+        # CSM-1B emotion mapping
+        emotion_map = {
+            # Core emotions
+            "calm_supportive": "calm",
+            "empathetic_sad": "sad",
+            "joyful_excited": "joyful",
+            "playful": "playful",
+            "confident": "confident",
+            "concerned_anxious": "concerned",
+            "angry_firm": "angry",
+            "neutral": "neutral",
+            
+            # Variations
+            "calm": "calm",
+            "sad": "sad",
+            "joyful": "joyful",
+            "happy": "joyful",
+            "excited": "joyful",
+            "anxious": "concerned",
+            "worried": "concerned",
+            "angry": "angry",
+            "firm": "confident",
+            "supportive": "calm",
+            "empathetic": "calm",
+            
+            # Default fallback
+            "default": "neutral"
+        }
+        
+        # Try exact match first
+        if emotion in emotion_map:
+            return emotion_map[emotion]
+        
+        # Try case-insensitive match
+        emotion_lower = emotion.lower()
+        for key, value in emotion_map.items():
+            if key.lower() == emotion_lower:
+                return value
+        
+        # Try partial match (e.g., "calm_supportive" -> "calm")
+        for key, value in emotion_map.items():
+            if key in emotion_lower or emotion_lower in key:
+                return value
+        
+        # Default fallback
+        return emotion_map.get("default", "neutral")
+    
+    def format_conversation_context_for_csm(
+        self,
+        conversation_history: Optional[List[Dict]] = None,
+        memory_triples: Optional[List[Dict]] = None,
+        include_audio: bool = True
+    ) -> List[Dict]:
+        """
+        Format conversation context for CSM-1B's _format_prompt() method
+        
+        Returns intermediate format that CSM-1B will convert to apply_chat_template format:
+        [{"text": "...", "speaker_id": 1}, {"text": "...", "speaker_id": 42}]
+        
+        CSM-1B's _format_prompt() will then convert this to apply_chat_template format.
+        
+        Args:
+            conversation_history: Optional conversation history from brain
+            memory_triples: Optional memory triples from websocket_session (format: {'q': user_text, 'r': oviya_text, 'emotion': ..., 'oviya_emotion': ...})
+            include_audio: Whether to include audio references if available
+            
+        Returns:
+            List of conversation turns in intermediate format (CSM-1B will convert to apply_chat_template)
+        """
+        from pathlib import Path
+        import json
+        import torchaudio
+        
+        ctx = []
+        
+        # 🆕 HANDLE EMOTION REFERENCE DIRECTORY PATHS: Support both local and VastAI paths
+        emotion_ref_dirs = [
+            Path("data/emotion_references"),  # Local development
+            Path("/workspace/emotion_references"),  # VastAI deployment
+            Path("/workspace/data/emotion_references"),  # Alternative VastAI path
+        ]
+        emotion_map_file = None
+        emotion_map = {}
+        
+        # Try to find emotion_map.json in any of the possible directories
+        for emotion_ref_dir in emotion_ref_dirs:
+            potential_file = emotion_ref_dir / "emotion_map.json"
+            if potential_file.exists():
+                emotion_map_file = potential_file
+                emotion_ref_dir_found = emotion_ref_dir
+                break
+        
+        if include_audio and emotion_map_file:
+            try:
+                with open(emotion_map_file, 'r') as f:
+                    emotion_map = json.load(f)
+            except Exception:
+                pass
+        
+        # Use memory_triples if provided (preferred format from websocket_server)
+        if memory_triples:
+            for turn in memory_triples[-3:]:  # Last 3 turns
+                # User turn
+                user_text = turn.get('q', '')
+                user_emotion = turn.get('emotion', 'neutral')
+                user_audio = turn.get('q_audio', None)  # 🆕 SPEECH-TO-SPEECH: Get user audio
+                
+                if user_text:
+                    user_turn = {
+                        "text": user_text,
+                        "speaker_id": 1  # User speaker ID
+                    }
+                    
+                    # 🆕 SPEECH-TO-SPEECH: Add user audio if available
+                    if include_audio and user_audio is not None:
+                        user_turn["audio"] = user_audio
+                    # Add emotion reference audio if available (fallback)
+                    elif include_audio and user_emotion in emotion_map and emotion_map[user_emotion]:
+                        try:
+                            ref_file = emotion_ref_dir_found / emotion_map[user_emotion][0]['file']
+                            if ref_file.exists():
+                                audio_tensor, sr = torchaudio.load(str(ref_file))
+                                audio_np = audio_tensor.squeeze().numpy().astype(np.float32)
+                                
+                                # 🆕 NORMALIZE: Ensure audio is properly formatted for CSM
+                                audio_np = self._normalize_audio_for_csm(audio_np, sr, target_sr=24000)
+                                user_turn["audio"] = audio_np
+                        except Exception:
+                            pass
+                    
+                    ctx.append(user_turn)
+                
+                # Oviya turn
+                oviya_text = turn.get('r', '')
+                oviya_emotion = turn.get('oviya_emotion', 'neutral')
+                
+                if oviya_text:
+                    oviya_turn = {
+                        "text": oviya_text,
+                        "speaker_id": 42  # Oviya's consistent speaker ID
+                    }
+                    
+                    # Add audio reference if available
+                    if include_audio and oviya_emotion in emotion_map and emotion_map[oviya_emotion]:
+                        try:
+                            ref_file = emotion_ref_dir_found / emotion_map[oviya_emotion][0]['file']
+                            if ref_file.exists():
+                                audio_tensor, sr = torchaudio.load(str(ref_file))
+                                audio_np = audio_tensor.squeeze().numpy().astype(np.float32)
+                                
+                                # 🆕 NORMALIZE: Ensure audio is properly formatted for CSM
+                                audio_np = self._normalize_audio_for_csm(audio_np, sr, target_sr=24000)
+                                oviya_turn["audio"] = audio_np
+                        except Exception:
+                            pass
+                    
+                    ctx.append(oviya_turn)
+        
+        # Fallback to conversation_history if memory_triples not provided
+        elif conversation_history:
+            for turn in conversation_history[-3:]:
+                if isinstance(turn, dict):
+                    text = turn.get('text', turn.get('q', turn.get('r', '')))
+                    speaker_id = turn.get('speaker_id', turn.get('speaker', 1))
+                    
+                    if text:
+                        # Ensure speaker_id is int
+                        if not isinstance(speaker_id, int):
+                            speaker_id = 1 if str(speaker_id) == "1" else 42
+                        
+                        turn_dict = {
+                            "text": text,
+                            "speaker_id": speaker_id
+                        }
+                        
+                        # Add audio reference if available
+                        if include_audio:
+                            emotion = turn.get('emotion', 'neutral')
+                            if emotion in emotion_map and emotion_map[emotion] and emotion_ref_dir_found:
+                                    try:
+                                        ref_file = emotion_ref_dir_found / emotion_map[emotion][0]['file']
+                                        if ref_file.exists():
+                                            audio_tensor, sr = torchaudio.load(str(ref_file))
+                                            audio_np = audio_tensor.squeeze().numpy().astype(np.float32)
+                                            
+                                            # 🆕 NORMALIZE: Ensure audio is properly formatted for CSM
+                                            audio_np = self._normalize_audio_for_csm(audio_np, sr, target_sr=24000)
+                                            turn_dict["audio"] = audio_np
+                                    except Exception:
+                                        pass
+                        
+                        ctx.append(turn_dict)
+                elif isinstance(turn, str):
+                    # Simple string format - assume it's user message
+                    ctx.append({
+                        "text": turn,
+                        "speaker_id": 1
+                    })
+        
+        return ctx
+    
+    def _normalize_audio_for_csm(
+        self,
+        audio: np.ndarray,
+        sample_rate: int,
+        target_sr: int = 24000
+    ) -> np.ndarray:
+        """
+        Normalize audio for CSM-1B processing
+        
+        Ensures audio is:
+        - Target sample rate (default 24kHz)
+        - float32 dtype
+        - Mono channel (1D array)
+        - Normalized amplitude range [-1.0, 1.0]
+        
+        Args:
+            audio: Input audio array
+            sample_rate: Original sample rate
+            target_sr: Target sample rate (default 24kHz for CSM)
+            
+        Returns:
+            Normalized audio array ready for CSM processor
+        """
+        if audio is None or len(audio) == 0:
+            return np.array([], dtype=np.float32)
+        
+        # Ensure float32
+        if audio.dtype != np.float32:
+            audio = audio.astype(np.float32)
+        
+        # Handle multi-channel audio (convert to mono)
+        if audio.ndim > 1:
+            if audio.shape[0] == 1:
+                audio = audio.squeeze(0)
+            elif audio.shape[1] == 1:
+                audio = audio.squeeze(1)
+            else:
+                # Average channels to mono
+                audio = np.mean(audio, axis=0)
+        
+        # Resample if needed
+        if sample_rate != target_sr:
+            try:
+                import torchaudio
+                audio_tensor = torch.from_numpy(audio).unsqueeze(0)
+                audio_tensor = torchaudio.functional.resample(audio_tensor, sample_rate, target_sr)
+                audio = audio_tensor.squeeze(0).numpy().astype(np.float32)
+            except Exception:
+                try:
+                    import librosa
+                    audio = librosa.resample(audio, orig_sr=sample_rate, target_sr=target_sr)
+                except Exception:
+                    pass  # Continue with original sample rate if resampling fails
+        
+        # Normalize amplitude to [-1.0, 1.0]
+        max_val = np.abs(audio).max()
+        if max_val > 0:
+            audio = audio / max_val
+        
+        return audio.astype(np.float32)
+    
     def _parse_llm_output(self, llm_output: str) -> Dict:
         """
         Parse LLM output to structured format.
@@ -1527,10 +1969,24 @@ Rules:
                     # Skip emotion smoothing for now to preserve original emotion
                     # The smoother was defaulting to "neutral" without proper embeddings
                     # This was making all speech sound flat
-                    # TODO: Add proper emotion embeddings later
-                    smoothed_emotion = parsed["emotion"]  # Use original emotion
-                    emotion_embedding = None
-                    transition_info = {"type": "direct", "blend_ratio": 1.0}
+                    # 🆕 REAL EMOTION EMBEDDINGS: Use EmotionEmbeddingGenerator
+                    from .emotion_embeddings import get_emotion_embedding_generator
+                    emotion_embed_gen = get_emotion_embedding_generator()
+                    
+                    # Extract emotion embedding for transition smoothing
+                    emotion_embedding = emotion_embed_gen.extract_text_emotion_embedding(
+                        user_message
+                    )
+                    
+                    # Use emotion transition smoother if available
+                    if hasattr(self, 'emotion_transition_smoother') and self.emotion_transition_smoother:
+                        smoothed_emotion, transition_info = self.emotion_transition_smoother.smooth_transition(
+                            parsed["emotion"],
+                            emotion_embedding.cpu().numpy()
+                        )
+                    else:
+                        smoothed_emotion = parsed["emotion"]  # Use original emotion
+                        transition_info = {"type": "direct", "blend_ratio": 1.0}
                     
                     # Update emotional memory
                     emotional_state = self.emotional_memory.update(
@@ -1616,8 +2072,23 @@ Rules:
                         pass
                     
                     # attach personality vector for downstream decoder
+                    # 🆕 CSM-1B COMPATIBLE: Return dict format for prosody computation
                     if self.enable_personality and self._last_personality_vector:
-                        parsed["personality_vector"] = self._last_personality_vector
+                        parsed["personality_vector"] = {
+                            "Ma": float(self._last_personality_vector[0]),
+                            "Ahimsa": float(self._last_personality_vector[1]),
+                            "Jeong": float(self._last_personality_vector[2]),
+                            "Logos": float(self._last_personality_vector[3]),
+                            "Lagom": float(self._last_personality_vector[4])
+                        }
+                    else:
+                        parsed["personality_vector"] = {
+                            "Ma": 0.5,
+                            "Ahimsa": 0.5,
+                            "Jeong": 0.5,
+                            "Logos": 0.5,
+                            "Lagom": 0.5
+                        }
                     return parsed
         except:
             pass
@@ -1643,7 +2114,21 @@ Rules:
             "style_hint": "",
             "prosodic_text": prosodic_text,
             "emotional_state": emotional_state,
-            "contextual_modifiers": self.emotional_memory.get_contextual_modifiers()
+            "contextual_modifiers": self.emotional_memory.get_contextual_modifiers(),
+            # 🆕 CSM-1B COMPATIBLE: Return dict format for prosody computation
+            "personality_vector": {
+                "Ma": float(self._last_personality_vector[0]),
+                "Ahimsa": float(self._last_personality_vector[1]),
+                "Jeong": float(self._last_personality_vector[2]),
+                "Logos": float(self._last_personality_vector[3]),
+                "Lagom": float(self._last_personality_vector[4])
+            } if self._last_personality_vector else {
+                "Ma": 0.5,
+                "Ahimsa": 0.5,
+                "Jeong": 0.5,
+                "Logos": 0.5,
+                "Lagom": 0.5
+            }
         }
     
     def _ensure_short_text(self, text: str) -> str:
@@ -1780,7 +2265,21 @@ Rules:
             "prosodic_text": text,  # Already has markup
             "emotional_state": emotional_state,
             "contextual_modifiers": self.emotional_memory.get_contextual_modifiers(),
-            "has_backchannel": False
+            "has_backchannel": False,
+            # 🆕 CSM-1B COMPATIBLE: Return dict format for prosody computation
+            "personality_vector": {
+                "Ma": float(self._last_personality_vector[0]),
+                "Ahimsa": float(self._last_personality_vector[1]),
+                "Jeong": float(self._last_personality_vector[2]),
+                "Logos": float(self._last_personality_vector[3]),
+                "Lagom": float(self._last_personality_vector[4])
+            } if self._last_personality_vector else {
+                "Ma": 0.5,
+                "Ahimsa": 0.5,
+                "Jeong": 0.5,
+                "Logos": 0.5,
+                "Lagom": 0.5
+            }
         }
     def _get_fallback_response(self, user_emotion: Optional[str] = None) -> Dict:
         """Fallback response if LLM fails."""
@@ -1807,7 +2306,21 @@ Rules:
             "prosodic_text": prosodic_text,
             "emotional_state": emotional_state,
             "contextual_modifiers": self.emotional_memory.get_contextual_modifiers(),
-            "has_backchannel": False
+            "has_backchannel": False,
+            # 🆕 CSM-1B COMPATIBLE: Return dict format for prosody computation
+            "personality_vector": {
+                "Ma": float(self._last_personality_vector[0]),
+                "Ahimsa": float(self._last_personality_vector[1]),
+                "Jeong": float(self._last_personality_vector[2]),
+                "Logos": float(self._last_personality_vector[3]),
+                "Lagom": float(self._last_personality_vector[4])
+            } if self._last_personality_vector else {
+                "Ma": 0.5,
+                "Ahimsa": 0.5,
+                "Jeong": 0.5,
+                "Logos": 0.5,
+                "Lagom": 0.5
+            }
         }
     
     def detect_safety_issue(self, user_message: str) -> Optional[str]:
@@ -1846,7 +2359,21 @@ Rules:
             "text": text,
             "emotion": "concerned_anxious",
             "intensity": 0.8,
-            "style_hint": "serious, caring"
+            "style_hint": "serious, caring",
+            # 🆕 CSM-1B COMPATIBLE: Return dict format for prosody computation
+            "personality_vector": {
+                "Ma": float(self._last_personality_vector[0]),
+                "Ahimsa": float(self._last_personality_vector[1]),
+                "Jeong": float(self._last_personality_vector[2]),
+                "Logos": float(self._last_personality_vector[3]),
+                "Lagom": float(self._last_personality_vector[4])
+            } if self._last_personality_vector else {
+                "Ma": 0.5,
+                "Ahimsa": 0.5,
+                "Jeong": 0.5,
+                "Logos": 0.5,
+                "Lagom": 0.5
+            }
         }
 
     def _combine_llm_and_empathic(

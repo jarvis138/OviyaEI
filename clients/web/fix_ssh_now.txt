@@ -1,0 +1,32 @@
+🚨 SSH AUTHENTICATION FAILURE - ACTION REQUIRED
+===============================================
+
+❌ PROBLEM: "Permission denied (publickey)"
+✅ SOLUTION: Add SSH key to Vast.ai web interface
+
+🔥 IMMEDIATE ACTION STEPS:
+-------------------------
+
+1. OPEN BROWSER: https://vast.ai/instances
+2. FIND INSTANCE: RTX 5880 Ada (175.155.64.172)
+3. CLICK: "Details" button
+4. CLICK: "SSH Keys" tab
+5. PASTE THIS KEY:
+   ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINRMvp2bi0+RFFfVDs/ennn2rSuSxugzjrOkdg0CXR6H oviya-deployment-assistant
+6. CLICK: "Save"
+7. WAIT: 30 seconds
+8. TRY SSH AGAIN: ssh -p 19199 root@175.155.64.172
+
+⚠️  DO NOT SKIP STEP 7 - Vast.ai needs time to apply the key!
+
+🔍 WHAT HAPPENS AFTER SUCCESSFUL SSH:
+-----------------------------------
+- You'll get a Linux prompt (not "Permission denied")
+- You can then upload and run the deployment script
+- Oviya will be deployed with GPU acceleration
+
+💡 ALTERNATIVE: Use Password Authentication
+-----------------------------------------
+If SSH keys don't work, Vast.ai might allow password login.
+Check your instance details for password option.
+

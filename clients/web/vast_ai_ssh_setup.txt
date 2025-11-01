@@ -1,0 +1,26 @@
+🚀 VAST.AI SSH SETUP STEPS
+===========================
+
+1. GO TO: https://vast.ai/instances
+2. FIND YOUR INSTANCE: RTX 5880 Ada 
+3. CLICK: "Details" button
+4. CLICK: "SSH Keys" tab
+5. PASTE THIS KEY:
+   ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINRMvp2bi0+RFFfVDs/ennn2rSuSxugzjrOkdg0CXR6H oviya-deployment-assistant
+6. CLICK: "Save" 
+7. WAIT: 30 seconds
+8. THEN RUN: ssh -p 19199 root@175.155.64.172
+
+⚠️  IMPORTANT: Do NOT run the # commented lines as commands!
+   Only run the actual SSH commands after adding the key.
+
+AFTER CONNECTING, RUN THESE COMMANDS ON VAST.AI:
+
+# Upload deployment script
+scp -P 19199 vast_ai_deploy.sh root@175.155.64.172:~/
+
+# Connect and run deployment  
+ssh -p 19199 root@175.155.64.172
+chmod +x vast_ai_deploy.sh
+./vast_ai_deploy.sh
+

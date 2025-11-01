@@ -7,7 +7,7 @@ Core voice synthesis and processing systems for Oviya EI.
 
 # Import voice configuration
 try:
-    from ..config.production_voice_config import VOICE_CONFIG
+    from ..shared.config.production_voice_config import VOICE_CONFIG
     __all__ = ['VOICE_CONFIG']
 except ImportError:
     VOICE_CONFIG = {

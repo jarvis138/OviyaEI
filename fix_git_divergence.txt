@@ -1,0 +1,30 @@
+🔄 FIX DIVERGENT BRANCHES - FORCE RESET TO LATEST
+================================================
+
+Since you're deploying fresh to Vast.ai, reset to match remote:
+
+# Check what branch you're on
+git branch
+
+# Check the divergence
+git log --oneline --graph --all -10
+
+# FORCE RESET to match remote main (THIS WILL DISCARD LOCAL CHANGES)
+git reset --hard origin/main
+
+# Verify you're now on latest
+git log --oneline -5
+git status
+
+# If you want to pull from dev branch instead:
+git reset --hard origin/dev
+
+ALTERNATIVE: If you want to preserve local changes:
+# Merge the changes
+git config pull.rebase false
+git pull origin main
+
+# Or rebase (cleaner history)
+git config pull.rebase true  
+git pull origin main
+

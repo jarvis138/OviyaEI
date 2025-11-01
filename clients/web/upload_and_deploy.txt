@@ -1,0 +1,38 @@
+🚀 OVIYA DEPLOYMENT ON VAST.AI - STEP BY STEP
+============================================
+
+✅ SSH CONNECTED: You can see root@C.27417057:~$
+
+📤 UPLOAD DEPLOYMENT SCRIPT:
+--------------------------
+# On your LOCAL machine (not Vast.ai), run:
+scp -P 19199 vast_ai_deploy.sh root@175.155.64.172:~/
+
+⚡ DEPLOY OVIYA ON VAST.AI:
+-------------------------
+# On Vast.ai (where you're connected now):
+chmod +x vast_ai_deploy.sh
+./vast_ai_deploy.sh
+
+🎯 WHAT THE SCRIPT DOES:
+----------------------
+• Installs system dependencies (python, pip, git, etc.)
+• Installs Ollama for LLM serving
+• Clones Oviya EI repository  
+• Sets up Python virtual environment
+• Installs all Python dependencies
+• Configures environment variables
+• Downloads Llama 3.2 model
+• Tests brain and voice systems
+• Starts WebSocket server on port 8000
+
+⏱️  EXPECTED DURATION: 10-15 minutes
+   (Model download takes the most time)
+
+🎉 FINAL RESULT:
+--------------
+• Oviya WebSocket server running on port 8000
+• All 30+ therapeutic components active
+• CSM-1B voice synthesis with CUDA graphs
+• GPU acceleration on RTX 5880 Ada
+

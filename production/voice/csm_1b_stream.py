@@ -33,8 +33,11 @@ import time
 from pathlib import Path
 import os
 import sys
+import logging
 sys.path.append('..')
 from huggingface_config import get_huggingface_token
+
+logger = logging.getLogger(__name__)
 
 
 # CUDA Graphs Timing Decorator (from Sesame documentation)
@@ -207,39 +210,310 @@ class CSMRVQStreamer:
         print("=" * 70)
         print()
     
+    def _normalize_audio_for_csm(
+        self,
+        audio: np.ndarray,
+        target_sample_rate: int = 24000
+    ) -> np.ndarray:
+        """
+        Normalize audio for CSM-1B processing
+        
+        Ensures audio is:
+        - 24kHz sample rate (or target_sample_rate)
+        - float32 dtype
+        - Mono channel (1D array)
+        - Normalized amplitude range [-1.0, 1.0]
+        
+        Args:
+            audio: Input audio array
+            target_sample_rate: Target sample rate (default 24kHz for CSM)
+            
+        Returns:
+            Normalized audio array ready for CSM processor
+        """
+        if audio is None or len(audio) == 0:
+            return np.array([], dtype=np.float32)
+        
+        # Ensure numpy array
+        if not isinstance(audio, np.ndarray):
+            audio = np.array(audio, dtype=np.float32)
+        
+        # Ensure float32
+        if audio.dtype != np.float32:
+            audio = audio.astype(np.float32)
+        
+        # Handle multi-channel audio (convert to mono)
+        if audio.ndim > 1:
+            if audio.shape[0] == 1:
+                audio = audio.squeeze(0)
+            elif audio.shape[1] == 1:
+                audio = audio.squeeze(1)
+            else:
+                # Average channels to mono
+                audio = np.mean(audio, axis=0)
+        
+        # Normalize amplitude to [-1.0, 1.0]
+        max_val = np.abs(audio).max()
+        if max_val > 0:
+            audio = audio / max_val
+        
+        # Resample if needed (assuming we know original sample rate)
+        # Note: Caller should resample before calling this if sample rate known
+        # This is a safety check - resampling without original SR is approximate
+        if target_sample_rate != 24000:
+            try:
+                # If we have librosa, use it for better resampling
+                import librosa
+                audio = librosa.resample(audio, orig_sr=24000, target_sr=target_sample_rate)
+            except ImportError:
+                # Fallback: use torchaudio if available
+                try:
+                    audio_tensor = torch.from_numpy(audio).unsqueeze(0)
+                    audio_tensor = torchaudio.functional.resample(audio_tensor, 24000, target_sample_rate)
+                    audio = audio_tensor.squeeze(0).numpy()
+                except Exception:
+                    logger.warning(f"Could not resample audio, assuming correct sample rate")
+        
+        return audio.astype(np.float32)
+    
+    def _preprocess_audio_for_processor(
+        self,
+        audio: np.ndarray
+    ) -> np.ndarray:
+        """
+        Preprocess audio array for CSM processor
+        
+        CSM processor expects audio in a specific format. This method ensures
+        audio is properly formatted before being passed to apply_chat_template().
+        
+        Args:
+            audio: Raw audio numpy array
+            
+        Returns:
+            Preprocessed audio ready for processor
+        """
+        if audio is None or len(audio) == 0:
+            return None
+        
+        # Normalize audio
+        audio = self._normalize_audio_for_csm(audio, target_sample_rate=24000)
+        
+        return audio
+    
+    def _apply_prosody_conditioning(
+        self,
+        inputs: Dict,
+        prosody_params: Optional[Dict] = None
+    ) -> Dict:
+        """
+        Apply prosody conditioning to CSM inputs
+        
+        Prosody parameters (pitch_scale, rate_scale, energy_scale) from
+        emotion_controller and ProsodyEngine are encoded into the input conditioning.
+        
+        CSM-1B doesn't directly accept prosody parameters, but we can:
+        1. Use emotion label (already included)
+        2. Adjust generation parameters based on prosody
+        3. Use reference audio with matching prosody
+        4. Add prosody hints to text if supported
+        
+        Args:
+            inputs: Processor inputs dict
+            prosody_params: Dict with pitch_scale, rate_scale, energy_scale, personality_influence
+            
+        Returns:
+            Modified inputs dict with prosody conditioning
+        """
+        if not prosody_params:
+            return inputs
+        
+        # CSM-1B primarily uses emotion label for prosody control
+        # Prosody parameters influence emotion selection and intensity
+        
+        # Store prosody params in metadata for potential future use
+        # CSM-1B generation parameters can be adjusted based on prosody
+        if 'metadata' not in inputs:
+            inputs['metadata'] = {}
+        
+        inputs['metadata']['prosody'] = prosody_params
+        
+        # Adjust emotion intensity based on prosody parameters
+        # Higher pitch/energy → more intense emotion
+        # Lower pitch/energy → gentler emotion
+        if 'emotion' in inputs:
+            emotion = inputs['emotion']
+            pitch_scale = prosody_params.get('pitch_scale', 1.0)
+            energy_scale = prosody_params.get('energy_scale', 1.0)
+            
+            # If prosody suggests gentler delivery, ensure emotion reflects that
+            if pitch_scale < 0.95 or energy_scale < 0.95:
+                # Gentler prosody - ensure emotion is appropriate
+                if emotion in ['angry_firm', 'concerned_anxious']:
+                    # Soften intense emotions for gentler prosody
+                    inputs['emotion_intensity'] = min(0.7, inputs.get('emotion_intensity', 0.7))
+            elif pitch_scale > 1.05 or energy_scale > 1.05:
+                # More expressive prosody - allow higher intensity
+                inputs['emotion_intensity'] = min(1.0, inputs.get('emotion_intensity', 0.7) * 1.1)
+        
+        # Personality influence metadata
+        if 'personality_influence' in prosody_params:
+            inputs['metadata']['personality_pillar'] = prosody_params['personality_influence']
+        
+        # Store prosody explanation for debugging
+        if 'prosody_explanation' in prosody_params:
+            inputs['metadata']['prosody_explanation'] = prosody_params['prosody_explanation']
+        
+        return inputs
+    
     def _format_prompt(
         self,
         text: str,
         emotion: str = "neutral",
         speaker_id: int = 0,
-        conversation_context: Optional[List[Dict]] = None
-    ) -> str:
+        conversation_context: Optional[List[Dict]] = None,
+        reference_audio: Optional[np.ndarray] = None,
+        user_audio: Optional[np.ndarray] = None  # 🆕 SPEECH-TO-SPEECH: Current user audio input
+    ) -> Dict:
         """
-        Format prompt with emotion, speaker consistency, and conversational context
-
+        Format prompt using CSM-1B's apply_chat_template() method
+        
+        🆕 SPEECH-TO-SPEECH: Includes user audio in conversation for native speech-to-speech
+        
+        According to Sesame's official format:
+        - Use processor.apply_chat_template() with structured conversation
+        - Format: [{"role": "0", "content": [{"type": "text", "text": "..."}]}]
+        - Can include audio references for conversational context
+        - 🆕 User audio can be included in current turn for speech-to-speech
+        
         Paper: "CSM leverages the history of the conversation to produce
         more natural and coherent speech."
-
-        For Oviya: Use consistent speaker ID (42) to ensure same voice across all emotions
+        
+        Args:
+            text: Text to synthesize
+            emotion: Emotional tone
+            speaker_id: Speaker ID (0 for assistant, 1 for user)
+            conversation_context: Previous conversation turns
+            reference_audio: Optional reference audio for voice conditioning
+            user_audio: Optional user audio waveform (24kHz) for current turn (speech-to-speech)
+            
+        Returns:
+            Dict with 'inputs' ready for processor
         """
-        # Use fixed speaker ID for Oviya's consistent voice personality
         consistent_speaker_id = 42  # Oviya's dedicated speaker ID
-
-        # Add emotion token with speaker consistency
-        prompt_parts = []
-
-        # Add conversational context (last 3 turns as paper suggests)
+        
+        # Build conversation structure for apply_chat_template
+        conversation = []
+        
+        # Add conversation history (last 3 turns as paper suggests)
         if conversation_context:
-            for turn in conversation_context[-3:]:  # Last 3 turns
-                speaker = "User" if turn.get("speaker_id") == 1 else f"Assistant_{consistent_speaker_id}"
+            for turn in conversation_context[-3:]:
+                turn_speaker_id = turn.get("speaker_id", 1)
                 turn_text = turn.get("text", "")
+                turn_audio = turn.get("audio", None)  # Optional audio reference
+                
                 if turn_text:
-                    prompt_parts.append(f"{speaker}: {turn_text}")
-
-        # Add current prompt with emotion and consistent speaker
-        prompt_parts.append(f"[Speaker:{consistent_speaker_id}][{emotion}] Assistant: {text}")
-
-        return "\n".join(prompt_parts)
+                    content = [{"type": "text", "text": turn_text}]
+                    
+                    # Add audio reference if available (normalize it)
+                    if turn_audio is not None:
+                        turn_audio = self._normalize_audio_for_csm(turn_audio, target_sample_rate=24000)
+                        if turn_audio is not None and len(turn_audio) > 0:
+                            content.append({
+                                "type": "audio",
+                                "audio": turn_audio  # Normalized audio ready for processor
+                            })
+                    
+                    conversation.append({
+                        "role": str(turn_speaker_id),
+                        "content": content
+                    })
+        
+        # 🆕 SPEECH-TO-SPEECH: Add user audio to current turn if provided
+        # IMPORTANT: Prevent duplication - user audio should only appear in current turn
+        # Check if user audio is already in conversation_context to avoid duplication
+        user_audio_in_context = False
+        if conversation_context:
+            for turn in conversation_context[-3:]:
+                if turn.get("speaker_id") == 1 and turn.get("audio") is not None:
+                    user_audio_in_context = True
+                    break
+        
+        if user_audio is not None and not user_audio_in_context:
+            # Preprocess user audio for CSM processor
+            user_audio = self._preprocess_audio_for_processor(user_audio)
+            
+            if user_audio is not None and len(user_audio) > 0:
+                # Get user's text from conversation_context (last user turn)
+                user_text_for_audio = text  # Default fallback
+                if conversation_context and len(conversation_context) > 0:
+                    # Find last user turn
+                    for turn in reversed(conversation_context):
+                        if turn.get("speaker_id") == 1:
+                            user_text_for_audio = turn.get("text", text)
+                            break
+                
+                # Add user audio as part of user's turn (before Oviya's response)
+                # This creates the speech-to-speech conversation: user speaks (with audio), Oviya responds
+                user_turn_content = [{"type": "text", "text": user_text_for_audio}]
+                user_turn_content.append({
+                    "type": "audio",
+                    "audio": user_audio  # Preprocessed audio ready for processor
+                })
+                conversation.append({
+                    "role": "1",  # User speaker ID
+                    "content": user_turn_content
+                })
+            
+            # Now add Oviya's response turn
+            current_content = [{"type": "text", "text": text}]  # Oviya's response text
+        else:
+            # Standard text-to-speech: just add Oviya's response turn
+            current_content = [{"type": "text", "text": text}]
+        
+        # Add reference audio if provided (for voice conditioning)
+        if reference_audio is not None:
+            # Normalize reference audio
+            reference_audio = self._normalize_audio_for_csm(reference_audio, target_sample_rate=24000)
+            if reference_audio is not None and len(reference_audio) > 0:
+                current_content.append({
+                    "type": "audio",
+                    "audio": reference_audio  # Normalized audio ready for processor
+                })
+        
+        conversation.append({
+            "role": str(consistent_speaker_id),
+            "content": current_content
+        })
+        
+        # Use processor.apply_chat_template() - official Sesame method
+        try:
+            inputs = self.processor.apply_chat_template(
+                conversation,
+                tokenize=True,
+                return_dict=True,
+                add_generation_prompt=True
+            )
+            
+            # Add emotion and speaker metadata as additional inputs
+            inputs['emotion'] = emotion
+            inputs['speaker_id'] = consistent_speaker_id
+            
+            return inputs
+            
+        except Exception as e:
+            # Fallback to simple text format if apply_chat_template fails
+            logger.warning(f"apply_chat_template failed, using fallback: {e}")
+            # Simple fallback: use processor with formatted text
+            formatted_text = f"[{consistent_speaker_id}][{emotion}] {text}"
+            if conversation_context:
+                context_text = " ".join([turn.get("text", "") for turn in conversation_context[-3:]])
+                formatted_text = f"{context_text} {formatted_text}"
+            
+            inputs = self.processor(formatted_text, return_tensors="pt")
+            inputs['emotion'] = emotion
+            inputs['speaker_id'] = consistent_speaker_id
+            
+            return inputs
     
     def _decode_rvq_window(
         self,
@@ -251,37 +525,126 @@ class CSMRVQStreamer:
         Paper: "Mimi, a split-RVQ tokenizer, producing one semantic codebook
         and N – 1 acoustic codebooks per frame at 12.5 Hz."
         
+        According to Hugging Face MimiModel documentation:
+        - Mimi.decode() expects audio_codes format: [batch, codebooks, frames]
+        - Returns audio_values attribute
+        
         Args:
-            rvq_window: [n_frames, n_codebooks] RVQ codes
+            rvq_window: [n_frames, n_codebooks] RVQ codes from CSM
             
         Returns:
             PCM audio as float32 numpy array (24kHz)
         """
         with torch.no_grad():
+            # CSM outputs: [frames, codebooks]
             # Mimi expects: [batch, codebooks, frames]
-            # We have: [frames, codebooks]
-            rvq_for_mimi = rvq_window.unsqueeze(0).transpose(1, 2)
+            # So we need to: unsqueeze(0) to add batch, then transpose(1,2)
+            rvq_for_mimi = rvq_window.unsqueeze(0).transpose(1, 2)  # [1, codebooks, frames]
             
-            # Decode with Mimi
-            decoder_output = self.mimi.decode(rvq_for_mimi)
+            # Verify shape
+            if rvq_for_mimi.dim() != 3:
+                raise ValueError(f"Mimi decode input must be 3D [batch, codebooks, frames], got {rvq_for_mimi.shape}")
             
-            # Extract audio tensor
+            batch_size, num_codebooks, num_frames = rvq_for_mimi.shape
+            
+            # Mimi decode expects audio_codes format
+            # According to Hugging Face docs: decoder_output = model.decode(encoder_outputs.audio_codes)
+            try:
+                decoder_output = self.mimi.decode(rvq_for_mimi)
+            except Exception as e:
+                logger.error(f"Mimi decode failed: {e}, shape: {rvq_for_mimi.shape}")
+                raise
+            
+            # Extract audio_values according to MimiModel API
+            # MimiModel.decode() returns object with .audio_values attribute
+            # Handle multiple possible output formats robustly
+            audio = None
+            
+            # Try different attribute names (order matters - most likely first)
             if hasattr(decoder_output, 'audio_values'):
                 audio = decoder_output.audio_values
             elif hasattr(decoder_output, 'audio'):
                 audio = decoder_output.audio
+            elif hasattr(decoder_output, 'waveform'):
+                audio = decoder_output.waveform
             elif isinstance(decoder_output, tuple):
+                # Tuple format: (audio, metadata) or (audio,)
                 audio = decoder_output[0]
-            else:
+            elif isinstance(decoder_output, torch.Tensor):
                 audio = decoder_output
+            elif hasattr(decoder_output, '__getitem__'):
+                # Try indexing if it's a sequence-like object
+                try:
+                    audio = decoder_output[0]
+                except (IndexError, TypeError):
+                    pass
+            
+            if audio is None:
+                raise ValueError(f"Unknown Mimi decode output format: {type(decoder_output)}, "
+                               f"attributes: {dir(decoder_output) if hasattr(decoder_output, '__dict__') else 'N/A'}")
+            
+            # Ensure audio is tensor
+            if not isinstance(audio, torch.Tensor):
+                try:
+                    audio = torch.tensor(audio, dtype=torch.float32)
+                except Exception as e:
+                    logger.error(f"Failed to convert audio to tensor: {e}")
+                    raise ValueError(f"Cannot convert audio to tensor: {type(audio)}")
             
             # Convert to numpy (float32, mono)
-            if audio.dim() == 3:  # [batch, channels, samples]
-                audio = audio.squeeze(0).squeeze(0)  # [samples]
-            elif audio.dim() == 2:  # [channels, samples]
-                audio = audio.squeeze(0)  # [samples]
+            # Handle different tensor shapes robustly
+            original_shape = audio.shape
+            
+            # Handle 3D: [batch, channels, samples] or [batch, samples, channels]
+            if audio.dim() == 3:
+                batch_size, dim1, dim2 = audio.shape
+                # Determine which dimension is samples (usually the largest)
+                if dim2 > dim1:  # [batch, channels, samples]
+                    audio = audio.squeeze(0)  # Remove batch
+                    if audio.dim() == 2 and audio.shape[0] == 1:  # [1, samples]
+                        audio = audio.squeeze(0)  # Remove channel
+                    elif audio.dim() == 2:  # [channels, samples] - average to mono
+                        audio = audio.mean(dim=0)
+                else:  # [batch, samples, channels]
+                    audio = audio.squeeze(0)  # Remove batch
+                    if audio.dim() == 2 and audio.shape[1] == 1:  # [samples, 1]
+                        audio = audio.squeeze(1)  # Remove channel
+                    elif audio.dim() == 2:  # [samples, channels] - average to mono
+                        audio = audio.mean(dim=1)
+            
+            # Handle 2D: [channels, samples] or [batch, samples] or [samples, channels]
+            elif audio.dim() == 2:
+                dim1, dim2 = audio.shape
+                # Determine which dimension is samples (usually the larger one)
+                if dim2 > dim1:  # [channels, samples] or [1, samples]
+                    if dim1 == 1:  # [1, samples]
+                        audio = audio.squeeze(0)
+                    else:  # [channels, samples] - average to mono
+                        audio = audio.mean(dim=0)
+                else:  # [samples, channels] or [samples, 1]
+                    if dim2 == 1:  # [samples, 1]
+                        audio = audio.squeeze(1)
+                    else:  # [samples, channels] - average to mono
+                        audio = audio.mean(dim=1)
+            
+            # Handle 1D: [samples] - already correct
+            elif audio.dim() == 1:
+                pass  # Already correct format
+            
+            # Final squeeze to ensure 1D (safety check)
+            while audio.dim() > 1:
+                audio = audio.squeeze(0)
+            
+            # Log shape transformation for debugging
+            if original_shape != audio.shape:
+                logger.debug(f"Mimi audio shape: {original_shape} -> {audio.shape}")
             
             pcm_chunk = audio.cpu().numpy().astype(np.float32)
+            
+            # Validate output
+            if len(pcm_chunk) == 0:
+                logger.warning(f"Empty audio chunk decoded from {rvq_window.shape}")
+                return np.zeros(512, dtype=np.float32)  # Return silence
             
             return pcm_chunk
 
@@ -298,12 +661,17 @@ class CSMRVQStreamer:
         emotion: str = "neutral",
         speaker_id: int = 0,  # Oviya's consistent speaker ID
         conversation_context: Optional[List[Dict]] = None,
+        user_audio: Optional[np.ndarray] = None,  # 🆕 SPEECH-TO-SPEECH: User audio input
+        reference_audio: Optional[np.ndarray] = None,  # 🆕 REFERENCE AUDIO: For voice conditioning
+        prosody_params: Optional[Dict] = None,  # 🆕 PROSODY: pitch_scale, rate_scale, energy_scale
         max_new_tokens: int = 1024,
         temperature: float = 0.8,
         top_p: float = 0.95
     ) -> AsyncGenerator[np.ndarray, None]:
         """
         Generate audio with true RVQ-level streaming
+        
+        🆕 SPEECH-TO-SPEECH: Accepts user audio for native speech-to-speech capability
         
         Paper Architecture:
         "The first multimodal backbone processes interleaved text and audio
@@ -325,12 +693,75 @@ class CSMRVQStreamer:
         # Reset any previous stop request
         self._reset_stop()
 
-        # Format prompt with context and speaker consistency
-        prompt = self._format_prompt(text, emotion, speaker_id, conversation_context)
+        # Format prompt using apply_chat_template (official Sesame method)
+        # 🆕 SPEECH-TO-SPEECH: Pass user audio and reference audio to format_prompt
+        inputs = self._format_prompt(
+            text, emotion, speaker_id, conversation_context,
+            user_audio=user_audio,
+            reference_audio=reference_audio
+        )
         
-        # Prepare inputs
-        inputs = self.processor(prompt, return_tensors="pt")
-        inputs = {k: v.to(self.model.device) for k, v in inputs.items()}
+        # 🆕 PROSODY: Apply prosody conditioning if provided
+        if prosody_params:
+            inputs = self._apply_prosody_conditioning(inputs, prosody_params)
+            
+            # 🆕 PROSODY CONTROL: Adjust generation parameters based on prosody
+            # Slower rate → lower temperature (more controlled, measured speech)
+            # Faster rate → higher temperature (more expressive, varied speech)
+            # Lower energy → lower temperature (calmer, more stable)
+            # Higher energy → higher temperature (more dynamic, expressive)
+            rate_scale = prosody_params.get('rate_scale', 1.0)
+            energy_scale = prosody_params.get('energy_scale', 1.0)
+            pitch_scale = prosody_params.get('pitch_scale', 1.0)
+            
+            # Adjust temperature based on prosody (0.6-0.9 range)
+            base_temperature = temperature
+            if rate_scale < 0.9:
+                # Slower speech → more controlled
+                temperature = max(0.6, base_temperature * 0.85)
+            elif rate_scale > 1.1:
+                # Faster speech → more expressive
+                temperature = min(0.95, base_temperature * 1.1)
+            
+            if energy_scale < 0.9:
+                # Lower energy → calmer
+                temperature = max(0.6, temperature * 0.9)
+            elif energy_scale > 1.1:
+                # Higher energy → more dynamic
+                temperature = min(0.95, temperature * 1.05)
+            
+            # Adjust top_p based on prosody (0.85-0.98 range)
+            base_top_p = top_p
+            if pitch_scale < 0.95:
+                # Lower pitch → more focused (lower top_p)
+                top_p = max(0.85, base_top_p * 0.95)
+            elif pitch_scale > 1.05:
+                # Higher pitch → more varied (higher top_p)
+                top_p = min(0.98, base_top_p * 1.02)
+            
+            logger.debug(f"🎭 Prosody-adjusted generation: temp={temperature:.3f}, top_p={top_p:.3f} "
+                        f"(rate={rate_scale:.2f}, energy={energy_scale:.2f}, pitch={pitch_scale:.2f})")
+        
+        # Move inputs to device (handle both dict and tensor formats)
+        if isinstance(inputs, dict):
+            # Filter out metadata (emotion, speaker_id, metadata) and keep only model inputs
+            model_inputs = {k: v for k, v in inputs.items() 
+                          if k in ['input_ids', 'attention_mask', 'pixel_values', 'audio', 'audio_values'] 
+                          and isinstance(v, torch.Tensor)}
+            # Move tensors to device
+            model_inputs = {k: v.to(self.model.device) for k, v in model_inputs.items()}
+            # Store metadata separately
+            emotion = inputs.get('emotion', emotion)
+            speaker_id = inputs.get('speaker_id', speaker_id)
+            
+            # 🆕 VERIFY: Ensure audio conditioning is present if audio was provided
+            if user_audio is not None or reference_audio is not None:
+                has_audio_conditioning = any(k in model_inputs for k in ['audio', 'audio_values', 'pixel_values'])
+                if not has_audio_conditioning:
+                    logger.warning("Audio provided but no audio conditioning found in model inputs")
+        else:
+            # Legacy format - convert to dict
+            model_inputs = {k: v.to(self.model.device) for k, v in inputs.items()}
         
         print(f"🎵 Streaming RVQ: '{text[:50]}...'")
         print(f"   Emotion: {emotion}")
@@ -344,22 +775,36 @@ class CSMRVQStreamer:
         with torch.no_grad():
             if self.enable_cuda_graphs:
                 # CUDA graphs optimized generation (from Sesame docs)
+                # First, record CUDA graph with a warmup run
+                if not hasattr(self, '_cuda_graph_recorded'):
+                    logger.info("Recording CUDA graph for first generation...")
+                    gen_kwargs = {
+                        "do_sample": True,
+                        "temperature": temperature,
+                        "top_p": top_p,
+                        "max_new_tokens": max_new_tokens,
+                        "use_cache": True,
+                    }
+                    # Warmup run to record graph
+                    _ = self.model.generate(**model_inputs, **gen_kwargs)
+                    self._cuda_graph_recorded = True
+                    logger.info("CUDA graph recorded successfully")
+                
                 gen_kwargs = {
                     "do_sample": True,
                     "temperature": temperature,
                     "top_p": top_p,
                     "max_new_tokens": max_new_tokens,
-                    # Static cache prevents recompilation
                     "use_cache": True,
                 }
 
                 print(f"🎯 Generating with CUDA graphs optimization...")
                 with TimerContext("CUDA Graphs Generation"):
-                    outputs = self.model.generate(**inputs, **gen_kwargs)
+                    outputs = self.model.generate(**model_inputs, **gen_kwargs)
             else:
                 # Standard generation
                 outputs = self.model.generate(
-                    **inputs,
+                    **model_inputs,
                     max_new_tokens=max_new_tokens,
                     do_sample=True,
                     temperature=temperature,
@@ -606,10 +1051,15 @@ class BatchedCSMStreamer:
         emotion: str = "neutral",
         speaker_id: int = 42,
         conversation_context: Optional[List[Dict]] = None,
+        user_audio: Optional[np.ndarray] = None,  # 🆕 SPEECH-TO-SPEECH: User audio input
+        reference_audio: Optional[np.ndarray] = None,  # 🆕 REFERENCE AUDIO: For voice conditioning
+        prosody_params: Optional[Dict] = None,  # 🆕 PROSODY: pitch_scale, rate_scale, energy_scale
         priority: int = 1  # 1=normal, 2=high (therapy urgency)
     ) -> str:
         """
         Submit a streaming request to the batch queue
+        
+        🆕 SPEECH-TO-SPEECH: Accepts user audio for native speech-to-speech
 
         Args:
             user_id: Unique identifier for the user/client
@@ -617,6 +1067,7 @@ class BatchedCSMStreamer:
             emotion: Emotional tone
             speaker_id: Voice consistency ID
             conversation_context: Recent conversation history
+            user_audio: Optional user audio waveform (24kHz) for speech-to-speech
             priority: Request priority (higher = faster processing)
 
         Returns:
@@ -631,6 +1082,9 @@ class BatchedCSMStreamer:
             'emotion': emotion,
             'speaker_id': speaker_id,
             'conversation_context': conversation_context,
+            'user_audio': user_audio,  # 🆕 SPEECH-TO-SPEECH: Include user audio
+            'reference_audio': reference_audio,  # 🆕 REFERENCE AUDIO: For voice conditioning
+            'prosody_params': prosody_params,  # 🆕 PROSODY: Prosody parameters
             'priority': priority,
             'submitted_at': time.time()
         }
@@ -800,11 +1254,15 @@ class BatchedCSMStreamer:
 
         try:
             # Stream audio chunks
+            # 🆕 SPEECH-TO-SPEECH: Pass user audio, reference_audio, and prosody_params
             async for chunk in streamer.generate_streaming(
                 text=request['text'],
                 emotion=request['emotion'],
                 speaker_id=request['speaker_id'],
-                conversation_context=request['conversation_context']
+                conversation_context=request['conversation_context'],
+                user_audio=request.get('user_audio'),  # 🆕 SPEECH-TO-SPEECH: Pass user audio
+                reference_audio=request.get('reference_audio'),  # 🆕 REFERENCE AUDIO: Pass reference audio
+                prosody_params=request.get('prosody_params')  # 🆕 PROSODY: Pass prosody parameters
             ):
                 # Send chunk to user's result queue
                 await result_queue.put(chunk)

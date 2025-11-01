@@ -10,7 +10,7 @@ import asyncio
 import numpy as np
 import json
 import base64
-from typing import Dict, Optional, List
+from typing import Dict, Optional, List, Tuple
 import torch
 from pathlib import Path
 import time
@@ -21,14 +21,9 @@ import sys
 # Add parent directory to path to find core modules
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-# Session management with fail-safe
-try:
-    from .session_manager import SessionManager
-    session_mgr = SessionManager(ttl_s=300)  # 5 minute sessions
-    SESSION_MANAGER_AVAILABLE = True
-except ImportError:
-    session_mgr = None
-    SESSION_MANAGER_AVAILABLE = False
+# Session management: Removed session_manager.py (functionality merged into ConversationSession)
+session_mgr = None
+SESSION_MANAGER_AVAILABLE = False
 
 # Optional JWT auth (fallback to allow if PyJWT missing or secret unset)
 try:
@@ -124,11 +119,9 @@ except ImportError:
     CSMRVQStreamer = None
     BatchedCSMStreamer = None
     get_batched_streamer = None
-try:
-    from .voice.csm_1b_generator_optimized import OptimizedCSMStreamer, get_optimized_streamer
-except ImportError:
-    OptimizedCSMStreamer = None
-    get_optimized_streamer = None
+# Removed: csm_1b_generator_optimized.py deleted (functionality in csm_1b_stream.py)
+OptimizedCSMStreamer = None
+get_optimized_streamer = None
 
 try:
     from core.voice.acoustic_emotion_detector import AcousticEmotionDetector
@@ -177,9 +170,47 @@ except ImportError:
     strategic_silence_manager = None
     emotional_pacing_controller = None
 
+# 🆕 EMOTION BLENDER & LIBRARY: Expand emotion range to 28+ emotions
+try:
+    from .voice.emotion_blender import EmotionBlender
+except ImportError:
+    EmotionBlender = None
+
+try:
+    from .voice.emotion_library import EmotionLibrary, get_emotion_library
+except ImportError:
+    EmotionLibrary = None
+    get_emotion_library = None
+
+# 🆕 EMOTION DISTRIBUTION MONITOR: Track and adapt emotion selection
+try:
+    from .shared.utils.emotion_monitor import EmotionDistributionMonitor, get_emotion_monitor
+except ImportError:
+    try:
+        from ..shared.utils.emotion_monitor import EmotionDistributionMonitor, get_emotion_monitor
+    except ImportError:
+        try:
+            from utils.emotion_monitor import EmotionDistributionMonitor, get_emotion_monitor
+        except ImportError:
+            EmotionDistributionMonitor = None
+            get_emotion_monitor = None
+
+# 🆕 GLOBAL SOUL: Cultural emotion wisdom integration
+try:
+    from .brain.global_soul import OviyaGlobalSoul
+except ImportError:
+    OviyaGlobalSoul = None
+
 import time
 
-# Prefer local adapter, fallback to WebRTC implementation
+# Prefer unified VAD+STT, fallback to legacy implementations
+try:
+    from .voice.unified_vad_stt import UnifiedVADSTTPipeline, get_unified_pipeline
+    _HAS_UNIFIED_VAD_STT = True
+except Exception:
+    _HAS_UNIFIED_VAD_STT = False
+
+# Legacy fallback
 try:
     from .voice.silero_vad_adapter import SileroVAD  # decoupled adapter
     _HAS_SILERO_VAD = True
@@ -302,64 +333,7 @@ def get_global_models():
     return _global_voice_input, _global_emotion_detector, _global_acoustic_emotion
 
 
-class StreamingSTT:
-    """
-    Lightweight streaming STT using faster-whisper.
-    Processes rolling audio buffer and emits partial transcripts.
-    """
-    def __init__(self, model_size: str = "small.en"):
-        device = "cuda" if torch.cuda.is_available() else "auto"
-        compute_type = "int8_float16" if device == "cuda" else "int8"
-        self.model = WhisperModel(model_size, device=device, compute_type=compute_type)
-        self.sample_rate = 16000
-        self.buffer = bytearray()
-        self.last_emit_time = 0.0
-        self.emit_interval = 0.25  # seconds between partial emissions
-        self.last_partial = ""
-        self.min_window_s = 1.0
-        self.max_window_s = 3.0
-
-    def add_audio(self, audio_bytes: bytes):
-        self.buffer.extend(audio_bytes)
-
-    def should_commit(self, vad_confidence: float) -> bool:
-        # Commit on strong VAD confidence to avoid mid-phoneme cuts
-        return vad_confidence >= 0.7 and len(self.buffer) >= int(self.sample_rate * self.min_window_s) * 2
-
-    def get_partial(self) -> str:
-        now = time.time()
-        if now - self.last_emit_time < self.emit_interval:
-            return ""
-        self.last_emit_time = now
-
-        # Need at least min_window_s of audio
-        min_bytes = int(self.sample_rate * self.min_window_s) * 2
-        if len(self.buffer) < min_bytes:
-            return ""
-
-        # Use the last window (up to max_window_s)
-        max_bytes = int(self.sample_rate * self.max_window_s) * 2
-        window = bytes(self.buffer[-max_bytes:]) if len(self.buffer) > max_bytes else bytes(self.buffer)
-
-        # Convert to float32
-        audio_array = np.frombuffer(window, dtype=np.int16).astype(np.float32) / 32768.0
-
-        try:
-            segments, _ = self.model.transcribe(
-                audio_array,
-                beam_size=1,
-                vad_filter=True,
-                without_timestamps=True,
-                language="en"
-            )
-            text = " ".join(s.text.strip() for s in segments if getattr(s, 'text', '').strip())
-            text = text.strip()
-            if text and text != self.last_partial:
-                self.last_partial = text
-                return text
-            return ""
-        except Exception:
-            return ""
+# StreamingSTT class removed - now using UnifiedVADSTTPipeline
 
 
 class ConversationSession:
@@ -379,20 +353,9 @@ class ConversationSession:
         self.emotion_controller = EmotionController()
         self.tts = HybridVoiceEngine(csm_url=CSM_URL, default_engine="csm")
 
-        # 🆕 INTEGRATE CUDA GRAPHS OPTIMIZED STREAMING FOR LOW-LATENCY THERAPY
-        print("🎯 Initializing CUDA Graphs Optimized CSM Streaming...")
-        self.optimized_streamer = get_optimized_streamer()  # CUDA graphs optimized
-
-        # 🔥 PRE-WARM CUDA GRAPHS FOR CONSISTENT <2s PERFORMANCE
-        print("🔥 Pre-warming CUDA graphs for therapy sessions...")
-        try:
-            self.optimized_streamer.warmup_for_therapy()
-            print("✅ CUDA graphs pre-warmed for <2s consistent performance!")
-        except Exception as e:
-            print(f"⚠️ CUDA graphs warmup failed: {e}")
-            print("   Continuing with standard initialization...")
-
-        print("✅ CUDA graphs optimized streamer ready (<2s latency target)")
+        # Removed: optimized_streamer from deleted csm_1b_generator_optimized.py
+        # CUDA graphs optimization is now handled in csm_1b_stream.py
+        self.optimized_streamer = None
 
         # 🆕 INTEGRATE BATCHED RVQ STREAMING FOR MULTI-USER CONCURRENT AUDIO
         print("🎤 Initializing Batched CSM Streaming for multi-user conversations...")
@@ -403,7 +366,21 @@ class ConversationSession:
             self.csm_streaming.start_batch_processor()
         )
         print("✅ Batched streaming processor started")
-        self.stt = StreamingSTT()
+        
+        # Use unified VAD+STT pipeline
+        if _HAS_UNIFIED_VAD_STT:
+            self.vad_stt_pipeline = get_unified_pipeline()
+            print("✅ Unified VAD+STT pipeline initialized")
+        else:
+            self.vad_stt_pipeline = None
+            # Legacy fallback
+            if _HAS_SILERO_VAD:
+                from .voice.unified_vad_stt import OptimizedWhisperSTT
+                self.stt = OptimizedWhisperSTT()
+            else:
+                self.stt = None
+            print("⚠️ Using legacy STT implementation")
+        
         self.is_generating = False
 
         # Psych systems
@@ -414,6 +391,71 @@ class ConversationSession:
         self.memory_system = OviyaMemorySystem()
         self.crisis_detector = CrisisDetectionSystem()
         self.empathy_engine = EmpathicThinkingEngine()
+        
+        # 🆕 TEMPORAL EMOTION TRACKER: Track emotion patterns over time
+        try:
+            from .brain.temporal_emotion_tracker import TemporalEmotionTracker
+            self.temporal_emotion_tracker = TemporalEmotionTracker()
+            print("✅ Temporal Emotion Tracker initialized")
+        except Exception as e:
+            print(f"⚠️ Temporal Emotion Tracker not available: {e}")
+            self.temporal_emotion_tracker = None
+        
+        # 🆕 EMOTIONAL REASONING ENGINE: Advanced emotional reasoning
+        try:
+            from .brain.emotional_reasoning import EmotionalReasoningEngine
+            self.emotional_reasoning = EmotionalReasoningEngine()
+            print("✅ Emotional Reasoning Engine initialized")
+        except Exception as e:
+            print(f"⚠️ Emotional Reasoning Engine not available: {e}")
+            self.emotional_reasoning = None
+        
+        # 🆕 PROSODY ENGINE: Initialize for personality-driven voice modulation
+        try:
+            from prosody_engine import ProsodyEngine
+            self.prosody_engine = ProsodyEngine()
+            print("✅ Prosody Engine initialized (personality-driven voice modulation)")
+        except ImportError:
+            try:
+                from .prosody_engine import ProsodyEngine
+                self.prosody_engine = ProsodyEngine()
+                print("✅ Prosody Engine initialized (personality-driven voice modulation)")
+            except Exception as e:
+                print(f"⚠️ Prosody Engine not available: {e}")
+                self.prosody_engine = None
+
+        # 🆕 EMOTION BLENDER: Initialize for 28+ emotion expansion
+        try:
+            self.emotion_blender = EmotionBlender()
+            print("✅ Emotion Blender initialized (28+ emotions)")
+        except Exception as e:
+            print(f"⚠️ Emotion Blender not available: {e}")
+            self.emotion_blender = None
+
+        # 🆕 EMOTION LIBRARY: Initialize for validation and tier-based selection
+        try:
+            self.emotion_library = get_emotion_library() if get_emotion_library else EmotionLibrary()
+            print("✅ Emotion Library initialized (49-emotion taxonomy)")
+        except Exception as e:
+            print(f"⚠️ Emotion Library not available: {e}")
+            self.emotion_library = None
+
+        # 🆕 EMOTION DISTRIBUTION MONITOR: Track emotion usage
+        try:
+            self.emotion_monitor = get_emotion_monitor() if get_emotion_monitor else EmotionDistributionMonitor()
+            print("✅ Emotion Distribution Monitor initialized")
+        except Exception as e:
+            print(f"⚠️ Emotion Monitor not available: {e}")
+            self.emotion_monitor = None
+
+        # 🆕 GLOBAL SOUL: Cultural emotion wisdom
+        try:
+            persona_config = self.brain.persona_config if hasattr(self.brain, 'persona_config') else {}
+            self.global_soul = OviyaGlobalSoul(persona_config)
+            print("✅ Global Soul initialized (Cultural wisdom: Ma, Jeong, Ahimsa, Logos, Lagom)")
+        except Exception as e:
+            print(f"⚠️ Global Soul not available: {e}")
+            self.global_soul = None
 
         # Load user personality
         self.personality = personality_store.load_personality(user_id)
@@ -431,6 +473,9 @@ class ConversationSession:
         self._reference_audio: Optional[np.ndarray] = None
         self._reference_text: Optional[str] = None
         self._memory_triples: List[Dict] = []  # (q, p, r) triples
+        # 🆕 SPEECH-TO-SPEECH: Store user audio for CSM-1B
+        self._user_audio_buffer: List[np.ndarray] = []  # Buffer user audio chunks (16kHz)
+        self._current_user_audio: Optional[np.ndarray] = None  # Current user speech audio
         # VAD state for commit (energy-based)
         self._vad_is_speaking: bool = False
         self._vad_silence_ms: float = 0.0
@@ -438,13 +483,19 @@ class ConversationSession:
         # Breath sample (optional)
         self._breath_buf: Optional[np.ndarray] = self._load_breath_sample()
         self._breath_sent: bool = False
-        # Silero VAD (if available)
-        self.silero_vad = SileroVAD() if _HAS_SILERO_VAD else None
-        self._silero_remainder = np.zeros((0,), dtype=np.float32)
+        # Silero VAD (if available, for legacy fallback)
+        if not _HAS_UNIFIED_VAD_STT:
+            self.silero_vad = SileroVAD() if _HAS_SILERO_VAD else None
+            self._silero_remainder = np.zeros((0,), dtype=np.float32)
+        else:
+            self.silero_vad = None
+            self._silero_remainder = None
     
     async def process_audio_chunk(self, audio_data: bytes) -> Optional[Dict]:
         """
-        Process incoming audio chunk
+        Process incoming audio chunk using unified VAD+STT pipeline
+        
+        🆕 SPEECH-TO-SPEECH: Also stores user audio for CSM-1B
         
         Args:
             audio_data: Raw audio bytes (PCM, 16-bit, 16kHz, mono)
@@ -455,15 +506,45 @@ class ConversationSession:
         # Convert bytes to numpy array
         audio_array = np.frombuffer(audio_data, dtype=np.int16).astype(np.float32) / 32768.0
         
-        # Add to legacy voice input buffer (for fallback)
-        self.voice_input.add_audio_chunk(audio_array)
-        # Also feed streaming STT
-        self.stt.add_audio(audio_data)
+        # 🆕 SPEECH-TO-SPEECH: Store user audio for CSM-1B
+        # Only store if user is speaking (not AI)
+        if not self.is_generating:
+            self._user_audio_buffer.append(audio_array.copy())
         
-        # Check for transcription
-        result = self.voice_input.get_transcription(timeout=0.01)
+        # Use unified VAD+STT pipeline if available
+        if self.vad_stt_pipeline:
+            result = await self.vad_stt_pipeline.process_audio_chunk(audio_array)
+            
+            # Set AI speaking state for interrupt detection
+            self.vad_stt_pipeline.set_ai_speaking_state(self.is_generating)
+            
+            # Return formatted result
+            if result.get('final_text'):
+                # 🆕 SPEECH-TO-SPEECH: Capture complete user audio when speech ends
+                if self._user_audio_buffer:
+                    self._current_user_audio = np.concatenate(self._user_audio_buffer)
+                    self._user_audio_buffer.clear()  # Reset buffer
+                return {
+                    'text': result['final_text'],
+                    'is_final': True,
+                    'partial': False
+                }
+            elif result.get('partial_text'):
+                return {
+                    'text': result['partial_text'],
+                    'is_final': False,
+                    'partial': True
+                }
+        else:
+            # Legacy fallback
+            self.voice_input.add_audio_chunk(audio_array)
+            if hasattr(self, 'stt') and self.stt:
+                if hasattr(self.stt, 'add_audio'):
+                    self.stt.add_audio(audio_array)
+            result = self.voice_input.get_transcription(timeout=0.01)
+            return result
         
-        return result
+        return None
 
     def _load_breath_sample(self) -> Optional[np.ndarray]:
         try:
@@ -481,6 +562,270 @@ class ConversationSession:
         except Exception:
             return None
 
+    def _convert_personality_vector_for_prosody(
+        self,
+        personality_vector: Dict[str, float]
+    ) -> Dict[str, Any]:
+        """
+        Convert personality vector format to ProsodyEngine expected format
+        
+        Args:
+            personality_vector: Dict with keys "Ma", "Ahimsa", "Jeong", "Logos", "Lagom"
+            
+        Returns:
+            Dict with 'pillars' key containing lowercase pillar names
+        """
+        # Handle both dict and list formats
+        if isinstance(personality_vector, dict):
+            # Extract values, handling both uppercase and lowercase keys
+            pillars = {
+                'ma': personality_vector.get('Ma', personality_vector.get('ma', 0.3)),
+                'ahimsa': personality_vector.get('Ahimsa', personality_vector.get('ahimsa', 0.4)),
+                'jeong': personality_vector.get('Jeong', personality_vector.get('jeong', 0.15)),
+                'logos': personality_vector.get('Logos', personality_vector.get('logos', 0.1)),
+                'lagom': personality_vector.get('Lagom', personality_vector.get('lagom', 0.05))
+            }
+        else:
+            # List format [Ma, Ahimsa, Jeong, Logos, Lagom]
+            pillars = {
+                'ma': personality_vector[0] if len(personality_vector) > 0 else 0.3,
+                'ahimsa': personality_vector[1] if len(personality_vector) > 1 else 0.4,
+                'jeong': personality_vector[2] if len(personality_vector) > 2 else 0.15,
+                'logos': personality_vector[3] if len(personality_vector) > 3 else 0.1,
+                'lagom': personality_vector[4] if len(personality_vector) > 4 else 0.05
+            }
+        
+        # Find dominant pillar
+        dominant_pillar = max(pillars.items(), key=lambda x: x[1])[0]
+        
+        return {
+            'pillars': pillars,
+            'dominant_pillar': dominant_pillar
+        }
+    
+    def _expand_emotion_with_blender(
+        self,
+        base_emotion: str,
+        context: Optional[Dict] = None
+    ) -> str:
+        """
+        Expand emotion using EmotionBlender to 28+ emotions
+        
+        CSM-1B Compatible: Returns expanded emotion that can be used with CSM-1B
+        """
+        if not self.emotion_blender:
+            return base_emotion
+        
+        try:
+            # Check if emotion is in blend recipes
+            if base_emotion in self.emotion_blender.BLEND_RECIPES:
+                # Already a blended emotion, return as-is
+                return base_emotion
+            
+            # Check if we should use a blended emotion based on context
+            # For now, use base emotion, but could add logic to select blended emotions
+            # based on intensity, context, etc.
+            return base_emotion
+        except Exception as e:
+            print(f"⚠️ Emotion blending failed: {e}")
+            return base_emotion
+
+    def _validate_and_resolve_emotion(
+        self,
+        emotion: str
+    ) -> Tuple[str, str]:
+        """
+        Validate and resolve emotion using EmotionLibrary
+        
+        Returns:
+            (resolved_emotion, tier)
+        """
+        if not self.emotion_library:
+            return emotion, "tier1_core"
+        
+        try:
+            # Resolve emotion (handles aliases)
+            resolved_emotion = self.emotion_library.get_emotion(emotion)
+            
+            # Get tier
+            tier = self.emotion_library.get_tier(resolved_emotion)
+            
+            return resolved_emotion, tier
+        except Exception as e:
+            print(f"⚠️ Emotion validation failed: {e}")
+            return emotion, "tier1_core"
+    
+    def _compute_prosody_for_csm(
+        self,
+        emotion: str,
+        intensity: float,
+        personality_vector: Dict[str, float],
+        response_text: str,
+        reciprocal_emotion_metadata: Optional[Dict] = None,
+        user_emotion_embedding: Optional[torch.Tensor] = None
+    ) -> Dict[str, float]:
+        """
+        Compute prosody parameters using ProsodyEngine and convert to CSM-1B format
+        
+        🆕 CSM-1B Compatible:
+        - Uses VAD dimensions from emotion embeddings to enhance prosody
+        - Integrates temporal patterns and emotional reasoning
+        
+        Args:
+            emotion: Primary emotion
+            intensity: Emotion intensity (0-1)
+            personality_vector: Oviya's personality vector (Ma, Ahimsa, Jeong, Logos, Lagom)
+            response_text: Text being synthesized
+            reciprocal_emotion_metadata: Optional reciprocal emotion metadata
+            user_emotion_embedding: Optional emotion embedding for VAD extraction
+            
+        Returns:
+            Dict with CSM-1B compatible prosody parameters
+        """
+        if not self.prosody_engine:
+            # Fallback: return basic prosody from emotion_controller
+            return {
+                'pitch_scale': 1.0,
+                'rate_scale': 1.0,
+                'energy_scale': 1.0
+            }
+        
+        try:
+            # 🆕 CULTURAL WISDOM INTEGRATION: Get cultural prosody hints
+            cultural_prosody_hints = {}
+            if self.global_soul:
+                try:
+                    ctx = {
+                        "emotional_weight": intensity,
+                        "intensity": intensity,
+                        "draft": response_text[:100],  # First 100 chars
+                        "session_seconds": len(self._memory_triples) * 30,  # Estimate
+                        "vulnerability": intensity if intensity > 0.7 else 0.0,
+                        "regular_checkin": len(self._memory_triples) > 5
+                    }
+                    cultural_plan = self.global_soul.plan(self.user_id, ctx)
+                    
+                    # Extract cultural prosody hints
+                    if cultural_plan.get("ma"):
+                        ma_pause = cultural_plan["ma"].get("pause_before_ms", 0)
+                        cultural_prosody_hints["ma_pause_ms"] = ma_pause
+                        cultural_prosody_hints["pause_quality"] = cultural_plan["ma"].get("pause_quality", "natural")
+                    
+                    if cultural_plan.get("sattva"):
+                        sattva = cultural_plan["sattva"]
+                        cultural_prosody_hints["energy"] = sattva.get("energy", 1.0)
+                        cultural_prosody_hints["tone"] = sattva.get("tone", "steady_presence")
+                        cultural_prosody_hints["prosody"] = sattva.get("prosody", "balanced")
+                    
+                    if cultural_plan.get("lagom"):
+                        cultural_prosody_hints["lagom_balance"] = cultural_plan["lagom"]
+                except Exception as e:
+                    print(f"⚠️ Cultural wisdom integration failed: {e}")
+            
+            # 🆕 VAD ENHANCEMENT: Extract VAD dimensions from emotion embedding
+            vad_dimensions = None
+            if user_emotion_embedding is not None:
+                try:
+                    from .brain.emotion_embeddings import get_emotion_embedding_generator
+                    emotion_embed_gen = get_emotion_embedding_generator()
+                    vad_dimensions = emotion_embed_gen.embedding_to_vad(user_emotion_embedding)
+                    
+                    # Enhance intensity with valence
+                    if vad_dimensions:
+                        intensity = intensity * (0.5 + vad_dimensions['valence'])
+                        intensity = max(0.0, min(1.0, intensity))
+                except Exception as e:
+                    print(f"⚠️ VAD extraction failed: {e}")
+            
+            # Convert personality vector format
+            personality_for_prosody = self._convert_personality_vector_for_prosody(personality_vector)
+            
+            # Prepare reciprocal emotion dict
+            reciprocal_emotion_dict = {
+                'ovi_emotion': 'neutral',
+                'intensity': 0.5
+            }
+            if reciprocal_emotion_metadata:
+                reciprocal_emotion_dict = {
+                    'ovi_emotion': reciprocal_emotion_metadata.get('shared_emotion', 'neutral'),
+                    'intensity': reciprocal_emotion_metadata.get('confidence', 0.7)
+                }
+            
+            # 🆕 VAD-AWARE PROSODY: Add VAD dimensions to prosody computation
+            prosody_kwargs = {
+                'emotion': emotion,
+                'intensity': intensity,
+                'personality_vector': personality_for_prosody,
+                'response_text': response_text,
+                'reciprocal_emotion': reciprocal_emotion_dict
+            }
+            
+            # Add VAD dimensions if available
+            if vad_dimensions:
+                prosody_kwargs['valence'] = vad_dimensions['valence']
+                prosody_kwargs['arousal'] = vad_dimensions['arousal']
+                prosody_kwargs['dominance'] = vad_dimensions['dominance']
+            
+            # Compute prosody parameters
+            prosody_result = self.prosody_engine.compute_prosody_parameters(**prosody_kwargs)
+            
+            prosody_params = prosody_result['parameters']
+            
+            # Convert to CSM-1B format
+            # CSM-1B uses relative scales (1.0 = neutral)
+            csm_prosody = {
+                'pitch_scale': 1.0 + prosody_params.get('f0_mean', 0.0),  # Convert semitones to scale
+                'rate_scale': prosody_params.get('speech_rate', 1.0),
+                'energy_scale': 1.0 + prosody_params.get('energy', 0.0),  # Convert relative to scale
+                'pause_probability': prosody_params.get('pause_probability', 0.1),
+                'intonation_curve': prosody_params.get('intonation_curve', 'neutral'),
+                'f0_range': prosody_params.get('f0_range', 0.0),
+                'prosody_explanation': prosody_result.get('explanation', ''),
+                'personality_influence': prosody_result.get('personality_influence', 'balanced')
+            }
+            
+            # 🆕 CULTURAL WISDOM: Merge cultural prosody hints
+            if cultural_prosody_hints:
+                # Adjust prosody based on cultural wisdom
+                if "ma_pause_ms" in cultural_prosody_hints:
+                    # Ma (contemplative space) → slower speech, more pauses
+                    csm_prosody['pause_probability'] = min(0.3, csm_prosody['pause_probability'] + 0.1)
+                    csm_prosody['rate_scale'] *= 0.95  # Slightly slower
+                
+                if "energy" in cultural_prosody_hints:
+                    # Sattva balance → adjust energy
+                    csm_prosody['energy_scale'] = cultural_prosody_hints["energy"]
+                
+                if "prosody" in cultural_prosody_hints:
+                    prosody_type = cultural_prosody_hints["prosody"]
+                    if prosody_type == "slower_softer":
+                        csm_prosody['rate_scale'] *= 0.9
+                        csm_prosody['energy_scale'] *= 0.85
+                    elif prosody_type == "warmer_gentler":
+                        csm_prosody['pitch_scale'] *= 1.05
+                        csm_prosody['energy_scale'] *= 0.9
+                
+                print(f"🌍 Cultural prosody applied: {cultural_prosody_hints.get('pause_quality', 'natural')}")
+            
+            # Clamp values to safe ranges
+            csm_prosody['pitch_scale'] = max(0.5, min(1.5, csm_prosody['pitch_scale']))
+            csm_prosody['rate_scale'] = max(0.5, min(1.5, csm_prosody['rate_scale']))
+            csm_prosody['energy_scale'] = max(0.5, min(1.5, csm_prosody['energy_scale']))
+            
+            print(f"🎭 Computed prosody: pitch={csm_prosody['pitch_scale']:.2f}, rate={csm_prosody['rate_scale']:.2f}, energy={csm_prosody['energy_scale']:.2f}")
+            print(f"   Personality influence: {csm_prosody['personality_influence']}")
+            
+            return csm_prosody
+            
+        except Exception as e:
+            print(f"⚠️ Prosody computation failed: {e}")
+            # Fallback to neutral prosody
+            return {
+                'pitch_scale': 1.0,
+                'rate_scale': 1.0,
+                'energy_scale': 1.0
+            }
+    
     async def _compute_personality_vector(self, user_text: str, user_emotion: str) -> Dict[str, float]:
         """
         Compute the 5-pillar personality vector for Oviya's response
@@ -513,6 +858,49 @@ class ConversationSession:
         if total > 1.0:
             for pillar in base_vector:
                 base_vector[pillar] /= total
+        
+        # 🆕 ENHANCE: Use brain's personality vector if available (more accurate)
+        try:
+            # Try to get personality vector from brain
+            brain_result = self.brain.think(user_text, user_emotion)
+            if 'personality_vector' in brain_result:
+                brain_personality = brain_result['personality_vector']
+                if isinstance(brain_personality, list) and len(brain_personality) >= 5:
+                    base_vector = {
+                        "Ma": float(brain_personality[0]),
+                        "Ahimsa": float(brain_personality[1]),
+                        "Jeong": float(brain_personality[2]),
+                        "Logos": float(brain_personality[3]),
+                        "Lagom": float(brain_personality[4])
+                    }
+                    print(f"🧠 Using brain's personality vector: Ma={base_vector['Ma']:.2f}, Jeong={base_vector['Jeong']:.2f}")
+        except Exception as e:
+            print(f"⚠️ Could not get brain personality vector: {e}")
+        
+        # 🆕 ENHANCE: Use ChromaDB memory evolution if available
+        try:
+            # Get personality evolution from ChromaDB
+            memory_results = await self.memory_system.retrieve_relevant_memories(
+                self.user_id, user_text, limit=10
+            )
+            if memory_results and 'personality_evolution' in memory_results:
+                evolution = memory_results['personality_evolution']
+                if evolution and len(evolution) > 0:
+                    # Use recent personality trend (last 3 interactions)
+                    recent_personality = evolution[-1] if evolution else None
+                    if recent_personality:
+                        # Blend current with historical trend (70% current, 30% historical)
+                        for pillar in base_vector:
+                            historical_weight = 0.3
+                            current_weight = 0.7
+                            # Extract from ChromaDB metadata if available
+                            # This creates consistency over time
+                            base_vector[pillar] = (
+                                base_vector[pillar] * current_weight +
+                                base_vector.get(pillar, 0.5) * historical_weight
+                            )
+        except Exception as e:
+            print(f"⚠️ Could not retrieve personality evolution: {e}")
 
         return base_vector
     
@@ -582,12 +970,24 @@ class ConversationSession:
             'duration': duration
         }
 
-    async def generate_response_streaming(self, websocket: WebSocket, user_text: str, user_emotion: str):
+    async def generate_response_streaming(self, websocket: WebSocket, user_text: str, user_emotion: str, user_audio: Optional[np.ndarray] = None):
         """
         Stream TTS audio chunks as they are generated with MCP emotional intelligence.
         Sends 'audio_chunk' messages and a terminal 'response' with text/emotion.
+        
+        🆕 SPEECH-TO-SPEECH: Accepts user audio for CSM-1B native speech-to-speech
+        
+        Args:
+            websocket: WebSocket connection
+            user_text: Transcribed user text
+            user_emotion: Detected user emotion
+            user_audio: Optional user audio waveform (16kHz) for speech-to-speech
         """
         await self.cancel_tts_stream()
+        
+        # 🆕 SPEECH-TO-SPEECH: Use current user audio if not provided
+        if user_audio is None and self._current_user_audio is not None:
+            user_audio = self._current_user_audio
 
         # MCP INTEGRATION: Crisis detection first (SAFETY FIRST)
         crisis_assessment = await self.crisis_detector.assess_crisis_risk(
@@ -598,14 +998,67 @@ class ConversationSession:
             # Handle crisis with immediate intervention
             emergency_resources = await self.crisis_detector.get_emergency_resources()
             crisis_response = crisis_assessment["immediate_response"]
-
-            # Send crisis intervention immediately
-            await websocket.send_json({
-                'type': 'crisis_intervention',
-                'text': crisis_response,
-                'emergency_resources': emergency_resources,
-                'severity': crisis_assessment["risk_level"]
-            })
+            
+            # 🆕 CSM-1B COMPATIBLE: Crisis responses need calmer, measured prosody
+            # Generate crisis response audio with appropriate prosody
+            crisis_emotion = "calm_supportive"  # Calm for crisis situations
+            crisis_prosody = {
+                'pitch_scale': 0.95,  # Slightly lower, more measured
+                'rate_scale': 0.85,   # Slower, more deliberate
+                'energy_scale': 0.9,   # Softer, more supportive
+                'pause_probability': 0.15,  # More pauses for emphasis
+                'personality_influence': 'crisis_support'
+            }
+            
+            # Format conversation context for CSM-1B (even for crisis)
+            conversation_context = self._format_context_for_tts()
+            
+            # Submit crisis response to CSM-1B with special prosody
+            batch_id = await self.csm_streaming.submit_stream_request(
+                user_id=self.user_id,
+                text=crisis_response,
+                emotion=crisis_emotion,
+                speaker_id=42,
+                conversation_context=conversation_context,
+                user_audio=None,  # No user audio for crisis responses
+                reference_audio=None,
+                prosody_params=crisis_prosody,
+                priority=10  # Highest priority for crisis
+            )
+            
+            # Stream crisis audio with calm prosody
+            async def _stream_crisis():
+                max_samples = 1920
+                buf, n = [], 0
+                async for c24 in self.csm_streaming.get_stream_results(self.user_id):
+                    c24 = self._ema_smooth(c24, alpha=0.1)
+                    buf.append(c24)
+                    n += len(c24)
+                    if n >= max_samples:
+                        arr = np.concatenate(buf)
+                        await websocket.send_json({
+                            'type': 'crisis_intervention',
+                            'format': 'pcm_s16le',
+                            'sample_rate': 24000,
+                            'audio_base64': base64.b64encode((arr * 32767).astype(np.int16).tobytes()).decode('utf-8'),
+                            'text': crisis_response,
+                            'emergency_resources': emergency_resources,
+                            'severity': crisis_assessment["risk_level"]
+                        })
+                        buf, n = [], 0
+                if buf:
+                    arr = np.concatenate(buf)
+                    await websocket.send_json({
+                        'type': 'crisis_intervention',
+                        'format': 'pcm_s16le',
+                        'sample_rate': 24000,
+                        'audio_base64': base64.b64encode((arr * 32767).astype(np.int16).tobytes()).decode('utf-8'),
+                        'text': crisis_response,
+                        'emergency_resources': emergency_resources,
+                        'severity': crisis_assessment["risk_level"]
+                    })
+            
+            await _stream_crisis()
             return
 
         # MCP INTEGRATION: Retrieve relevant memories for context
@@ -616,12 +1069,110 @@ class ConversationSession:
         # MCP INTEGRATION: Compute current personality vector
         personality_vector = await self._compute_personality_vector(user_text, user_emotion)
 
+        # 🆕 TEMPORAL EMOTION TRACKING: Track emotion state
+        emotion_intensity = 0.7  # Default, will be enhanced
+        if self.temporal_emotion_tracker:
+            try:
+                # Get emotion detector for intensity
+                emotion_result = self.emotion_detector.detect_emotion(user_text)
+                emotion_intensity = emotion_result.get('intensity', 0.7)
+                
+                # 🆕 ACOUSTIC EMOTION DETECTOR: Enhance emotion detection with audio features
+                if user_audio is not None and self.acoustic_emotion:
+                    try:
+                        acoustic_result = self.acoustic_emotion.detect_emotion(user_audio, sample_rate=16000)
+                        # Get Oviya emotion from acoustic result (mapped to 49-emotion taxonomy)
+                        acoustic_emotions = acoustic_result.get('oviya_emotions', [])
+                        if acoustic_emotions:
+                            acoustic_emotion = acoustic_emotions[0]  # Use first mapped emotion
+                        else:
+                            # Fallback to base emotion mapping
+                            base_emotion = acoustic_result.get('emotion', user_emotion)
+                            acoustic_emotion = base_emotion
+                        
+                        acoustic_arousal = acoustic_result.get('arousal', 0.5)
+                        acoustic_valence = acoustic_result.get('valence', 0.5)
+                        acoustic_confidence = acoustic_result.get('confidence', 0.5)
+                        
+                        # Blend acoustic and text-based emotion
+                        if acoustic_emotion != user_emotion:
+                            # Prefer acoustic emotion if confidence is high
+                            if acoustic_confidence > 0.7:
+                                user_emotion = acoustic_emotion
+                                print(f"🎵 Acoustic emotion override: {acoustic_emotion} (confidence: {acoustic_confidence:.2f})")
+                        
+                        # Enhance intensity with acoustic features
+                        emotion_intensity = max(emotion_intensity, (acoustic_arousal + abs(acoustic_valence)) / 2.0)
+                    except Exception as e:
+                        print(f"⚠️ Acoustic emotion detection failed: {e}")
+                
+                # Get VAD dimensions if available
+                valence = 0.5
+                arousal = 0.5
+                dominance = 0.5
+                
+                # Extract emotion embedding for VAD
+                try:
+                    from .brain.emotion_embeddings import get_emotion_embedding_generator
+                    emotion_embed_gen = get_emotion_embedding_generator()
+                    user_emotion_embed = emotion_embed_gen.extract_combined_emotion_embedding(
+                        audio=user_audio if user_audio is not None else None,
+                        text=user_text,
+                        sample_rate=16000
+                    )
+                    vad_dimensions = emotion_embed_gen.embedding_to_vad(user_emotion_embed)
+                    valence = vad_dimensions['valence']
+                    arousal = vad_dimensions['arousal']
+                    dominance = vad_dimensions['dominance']
+                    emotion_intensity = (valence + arousal + dominance) / 3.0
+                except Exception as e:
+                    print(f"⚠️ VAD extraction failed: {e}")
+                
+                # Add emotion state to tracker
+                self.temporal_emotion_tracker.add_emotion_state(
+                    emotion=user_emotion,
+                    intensity=emotion_intensity,
+                    confidence=0.8,
+                    valence=valence,
+                    arousal=arousal,
+                    dominance=dominance,
+                    context=user_text[:100]  # First 100 chars
+                )
+                
+                # Get temporal patterns for context
+                temporal_context = self.temporal_emotion_tracker.get_context_for_csm()
+            except Exception as e:
+                print(f"⚠️ Temporal tracking failed: {e}")
+                temporal_context = None
+        else:
+            temporal_context = None
+        
+        # 🆕 EMOTIONAL REASONING: Reason about emotional cause and goals
+        emotional_reasoning = None
+        if self.emotional_reasoning:
+            try:
+                conversation_context = [
+                    {'text': turn.get('q', turn.get('r', '')), 'speaker_id': turn.get('speaker_id', 1)}
+                    for turn in self._memory_triples[-5:]
+                ]
+                
+                emotional_reasoning = self.emotional_reasoning.get_reasoning_for_csm(
+                    current_emotion=user_emotion,
+                    intensity=emotion_intensity,
+                    conversation_context=conversation_context,
+                    temporal_patterns=temporal_context
+                )
+            except Exception as e:
+                print(f"⚠️ Emotional reasoning failed: {e}")
+        
         # MCP INTEGRATION: Generate deep empathic response
         emotion_context = {
             "emotion": user_emotion,
-            "intensity": 0.7,  # Could be enhanced with acoustic analysis
+            "intensity": emotion_intensity,
             "patterns": relevant_memories.get("conversation_history", []),
-            "conflicts": []  # Could be detected from conversation flow
+            "conflicts": [],  # Could be detected from conversation flow
+            "temporal_patterns": temporal_context,  # 🆕 Add temporal context
+            "emotional_reasoning": emotional_reasoning  # 🆕 Add emotional reasoning
         }
 
         empathic_response = await self.empathy_engine.generate_empathic_response(
@@ -652,14 +1203,24 @@ class ConversationSession:
         )
 
         # 🆕 EMOTIONAL RECIPROCITY INTEGRATION: Add Oviya's internal emotional state
-        # Create emotion embedding (simplified - would use real emotion detector)
-        emotion_embed = torch.randn(64)  # Placeholder - should come from emotion detector
+        # 🆕 REAL EMOTION EMBEDDINGS: Use EmotionEmbeddingGenerator
+        from .brain.emotion_embeddings import get_emotion_embedding_generator
+        emotion_embed_gen = get_emotion_embedding_generator()
+        
+        # Extract combined emotion embedding from audio and text
+        user_emotion_embed = emotion_embed_gen.extract_combined_emotion_embedding(
+            audio=user_audio if user_audio is not None else None,
+            text=user_text,
+            sample_rate=16000,
+            audio_weight=0.6  # Favor audio for emotional prosody
+        )
+        
         oviya_personality_tensor = torch.tensor(list(personality_vector.values()))
 
         # Enhance response with reciprocal empathy
         enhanced_response_text, reciprocity_metadata = await reciprocal_empathy_integrator.enhance_response_with_reciprocity(
             response_text=empathic_response["response"],
-            user_emotion_embed=emotion_embed,
+            user_emotion_embed=user_emotion_embed,
             oviya_personality=oviya_personality_tensor,
             conversation_context={
                 "emotion": user_emotion,
@@ -667,6 +1228,55 @@ class ConversationSession:
                 "emotion_intensity": emotion_context.get("intensity", 0.7)
             }
         )
+        
+        # 🆕 POSITIVE AFFIRMATIONS: Use AI Therapist MCP for targeted affirmations
+        # Check if user might benefit from affirmations (low self-worth, high vulnerability)
+        should_add_affirmations = (
+            emotion_context.get("intensity", 0.7) < 0.4 or  # Low confidence
+            any(word in user_text.lower() for word in ['worthless', 'not good enough', 'stupid', 'failure', 'hate myself']) or
+            len(self._memory_triples) > 10  # Established relationship
+        )
+        
+        affirmation_text = None
+        if should_add_affirmations:
+            try:
+                # Get AI Therapist MCP client
+                from .brain.mcp_client import get_mcp_client
+                ai_therapist = get_mcp_client("ai-therapist")
+                
+                if ai_therapist:
+                    # Initialize if needed
+                    if not hasattr(ai_therapist, '_initialized') or not ai_therapist._initialized:
+                        await ai_therapist.initialize()
+                    
+                    # Map user emotion to affirmation focus area
+                    affirmation_focus = {
+                        'sad': 'self_worth',
+                        'anxious': 'capabilities',
+                        'angry': 'resilience',
+                        'fearful': 'purpose',
+                        'lonely': 'relationships'
+                    }.get(user_emotion, 'self_worth')
+                    
+                    # Get targeted affirmation
+                    affirmation_result = await ai_therapist.call_tool("positive_affirmations", {
+                        "focus_area": affirmation_focus,
+                        "specific_concerns": [user_text[:100]],  # First 100 chars
+                        "tone": "gentle"  # Gentle tone for Oviya
+                    })
+                    
+                    # Extract affirmation text
+                    if isinstance(affirmation_result, dict):
+                        affirmation_text = affirmation_result.get("affirmation", affirmation_result.get("text", ""))
+                        if affirmation_text:
+                            # Integrate affirmation naturally into response
+                            enhanced_response_text = f"{enhanced_response_text} {affirmation_text}"
+                            print(f"💝 Added positive affirmation: {affirmation_text[:50]}...")
+            except Exception as e:
+                print(f"⚠️ Positive affirmations failed: {e}")
+        
+        # Store reciprocity_metadata for prosody computation
+        # This will be used by ProsodyEngine to modulate voice based on Oviya's reciprocal emotion
 
         # 🆕 THERAPEUTIC PACING INTEGRATION: Add pause markers and voice modulation
         # Apply therapeutic pacing to the enhanced response
@@ -686,8 +1296,64 @@ class ConversationSession:
         # Apply to prosody controller (integrate with existing prosody system)
         prosodic_text = response_with_pauses  # Start with pause-enhanced text
 
-        # TODO: Integrate voice_modulation with CSM-1B prosody controller
-        emotion = user_emotion or "neutral"
+        # 🆕 PROSODY ENGINE INTEGRATION: Compute personality-driven prosody
+        # This integrates all 5 personality pillars (Ma, Jeong, Ahimsa, Logos, Lagom)
+        # with emotional reciprocity and therapeutic context
+        # 🆕 VAD ENHANCEMENT: Include emotion embedding for VAD-based prosody
+        personality_prosody = self._compute_prosody_for_csm(
+            emotion=user_emotion or "neutral",
+            intensity=emotion_context.get("intensity", 0.7),
+            personality_vector=personality_vector,
+            response_text=prosodic_text,
+            reciprocal_emotion_metadata=reciprocity_metadata if 'reciprocity_metadata' in locals() else None,
+            user_emotion_embedding=user_emotion_embed if 'user_emotion_embed' in locals() else None
+        )
+        
+        # 🆕 EMOTION LIBRARY: Validate and resolve emotion
+        validated_emotion, emotion_tier = self._validate_and_resolve_emotion(emotion)
+        
+        # 🆕 EMOTION BLENDER: Expand to 28+ emotions if appropriate
+        expanded_emotion = self._expand_emotion_with_blender(
+            validated_emotion,
+            context=emotion_context
+        )
+        
+        # 🆕 EMOTION DISTRIBUTION MONITOR: Record emotion usage
+        if self.emotion_monitor:
+            try:
+                self.emotion_monitor.record_emotion(expanded_emotion)
+                # Check distribution health and adapt if needed
+                health = self.emotion_monitor.check_distribution_health()
+                if health.get("status") == "unhealthy":
+                    # Could adjust emotion selection based on distribution
+                    print(f"⚠️ Emotion distribution unhealthy: {health.get('issues', [])}")
+            except Exception as e:
+                print(f"⚠️ Emotion monitoring failed: {e}")
+        
+        # Map emotion to CSM-1B format and compute prosody
+        oviya_emotion_params = self.emotion_controller.map_emotion(
+            expanded_emotion,  # Use expanded emotion
+            emotion_context.get("intensity", 0.7)
+        )
+        
+        # 🆕 MERGE PROSODY: Merge personality-driven prosody with emotion params
+        # personality_prosody contains pitch_scale, rate_scale, energy_scale from ProsodyEngine
+        # Merge into oviya_emotion_params for CSM-1B
+        if personality_prosody:
+            # Merge prosody parameters
+            oviya_emotion_params.update({
+                'pitch_scale': personality_prosody.get('pitch_scale', 1.0),
+                'rate_scale': personality_prosody.get('rate_scale', 1.0),
+                'energy_scale': personality_prosody.get('energy_scale', 1.0),
+                'pause_probability': personality_prosody.get('pause_probability', 0.1),
+                'intonation_curve': personality_prosody.get('intonation_curve', 'neutral'),
+                'f0_range': personality_prosody.get('f0_range', 0.0),
+                'personality_influence': personality_prosody.get('personality_influence', 'balanced'),
+                'prosody_explanation': personality_prosody.get('prosody_explanation', '')
+            })
+        
+        print(f"🎭 Final emotion params: {oviya_emotion_params.get('style_token', emotion)}")
+        print(f"   Prosody: pitch={oviya_emotion_params.get('pitch_scale', 1.0):.2f}, rate={oviya_emotion_params.get('rate_scale', 1.0):.2f}, energy={oviya_emotion_params.get('energy_scale', 1.0):.2f}")
 
         # Stream LLM tokens while starting TTS ASAP
         start_time = time.time()
@@ -714,11 +1380,40 @@ class ConversationSession:
             brain_resp_full = self.brain.think(user_text, user_emotion)
             prosodic_text = brain_resp_full.get('prosodic_text') or brain_resp_full.get('text', '')
             emotion = brain_resp_full.get('emotion', emotion)
+            # Use brain's personality vector if available
+            if 'personality_vector' in brain_resp_full:
+                personality_vector = {
+                    "Ma": brain_resp_full['personality_vector'][0],
+                    "Ahimsa": brain_resp_full['personality_vector'][1],
+                    "Jeong": brain_resp_full['personality_vector'][2],
+                    "Logos": brain_resp_full['personality_vector'][3],
+                    "Lagom": brain_resp_full['personality_vector'][4]
+                }
+            
+            # 🆕 PROSODY COMPUTATION FOR FALLBACK PATH
+            # Even in fallback, compute prosody for personality-driven voice
+            if self.prosody_engine:
+                try:
+                    personality_prosody = self._compute_prosody_for_csm(
+                        emotion=emotion,
+                        intensity=0.7,
+                        personality_vector=personality_vector,
+                        response_text=prosodic_text,
+                        reciprocal_emotion_metadata=reciprocity_metadata if 'reciprocity_metadata' in locals() else None
+                    )
+                    # Merge prosody into emotion params
+                    oviya_emotion_params.update(personality_prosody)
+                except Exception as e:
+                    print(f"⚠️ Fallback prosody computation failed: {e}")
 
-        intensity = 0.7  # Could be derived from personality vector
-        oviya_emotion_params = self.emotion_controller.map_emotion(
-            emotion, intensity
-        )
+        # Map emotion to CSM-1B format using brain's helper
+        try:
+            csm_emotion = self.brain.map_emotion_to_csm_format(
+                oviya_emotion_params.get('style_token', emotion)
+            )
+            oviya_emotion_params['csm_emotion'] = csm_emotion
+        except Exception:
+            oviya_emotion_params['csm_emotion'] = oviya_emotion_params.get('style_token', emotion)
 
         # MCP INTEGRATION: Store conversation in memory system
         await self.memory_system.store_conversation_memory(self.user_id, {
@@ -730,8 +1425,8 @@ class ConversationSession:
             "session_id": f"session_{int(time.time())}"
         })
 
-        # Store memory triple
-        self._add_memory_triple(user_text, prosodic_text)
+        # Store memory triple with emotion info and user audio
+        self._add_memory_triple(user_text, prosodic_text, user_emotion, oviya_emotion_params.get('style_token', emotion), user_audio=user_audio)
 
         self._tts_cancel_requested = False
 
@@ -741,13 +1436,70 @@ class ConversationSession:
                 buf, n = [], 0
                 ttfb_sent = False
                         # 🆕 BATCHED RVQ STREAMING: Multi-user concurrent audio generation
+                # Format conversation context with audio references
+                conversation_context = self._format_context_for_tts()
+                
+                # Get reference audio for current emotion if available
+                # 🆕 HANDLE EMOTION REFERENCE DIRECTORY PATHS: Support both local and VastAI paths
+                emotion_ref_dirs = [
+                    Path("data/emotion_references"),  # Local development
+                    Path("/workspace/emotion_references"),  # VastAI deployment
+                    Path("/workspace/data/emotion_references"),  # Alternative VastAI path
+                ]
+                emotion_map_file = None
+                emotion_ref_dir_found = None
+                reference_audio = None
+                
+                # Try to find emotion_map.json in any of the possible directories
+                for emotion_ref_dir in emotion_ref_dirs:
+                    potential_file = emotion_ref_dir / "emotion_map.json"
+                    if potential_file.exists():
+                        emotion_map_file = potential_file
+                        emotion_ref_dir_found = emotion_ref_dir
+                        break
+                
+                if emotion_map_file:
+                    try:
+                        with open(emotion_map_file, 'r') as f:
+                            emotion_map = json.load(f)
+                        current_emotion = oviya_emotion_params.get('style_token', emotion)
+                        if current_emotion in emotion_map and emotion_map[current_emotion] and emotion_ref_dir_found:
+                            ref_file = emotion_ref_dir_found / emotion_map[current_emotion][0]['file']
+                            if ref_file.exists():
+                                import torchaudio
+                                audio_tensor, sr = torchaudio.load(str(ref_file))
+                                reference_audio = audio_tensor.squeeze().numpy().astype(np.float32)
+                    except Exception:
+                        pass
+                
+                # 🆕 SPEECH-TO-SPEECH: Submit request with user audio for native speech-to-speech
+                # Resample user audio to 24kHz if provided (CSM-1B expects 24kHz)
+                user_audio_24k = None
+                if user_audio is not None:
+                    try:
+                        import torchaudio
+                        audio_tensor = torch.tensor(user_audio, dtype=torch.float32)
+                        if audio_tensor.dim() == 1:
+                            audio_tensor = audio_tensor.unsqueeze(0)
+                        # Resample from 16kHz to 24kHz
+                        user_audio_24k = torchaudio.functional.resample(audio_tensor, 16000, 24000)
+                        user_audio_24k = user_audio_24k.squeeze(0).numpy().astype(np.float32)
+                        print(f"🎤 Resampled user audio: {len(user_audio)} samples (16kHz) → {len(user_audio_24k)} samples (24kHz)")
+                    except Exception as e:
+                        print(f"⚠️ Failed to resample user audio: {e}")
+                        user_audio_24k = None
+                
                 # Submit request to batch processor for optimal GPU utilization
+                # 🆕 PASS PROSODY PARAMS AND REFERENCE AUDIO
                 batch_id = await self.csm_streaming.submit_stream_request(
                     user_id=self.user_id,
                     text=prosodic_text,
                     emotion=oviya_emotion_params.get('style_token', emotion),
                     speaker_id=42,  # Oviya's consistent voice
-                    conversation_context=self._format_context_for_tts(),
+                    conversation_context=conversation_context,
+                    user_audio=user_audio_24k,  # 🆕 SPEECH-TO-SPEECH: Pass user audio
+                    reference_audio=reference_audio,  # 🆕 REFERENCE AUDIO: Pass emotion reference audio
+                    prosody_params=oviya_emotion_params,  # 🆕 PROSODY: Pass prosody parameters (pitch_scale, rate_scale, energy_scale)
                     priority=1  # Normal priority (could be higher for crisis situations)
                 )
 
@@ -840,18 +1592,118 @@ class ConversationSession:
                 self._tts_stream_task.cancel()
         self._tts_stream_task = None
 
-    def _add_memory_triple(self, q: str, r: str):
+    def _add_memory_triple(self, q: str, r: str, user_emotion: str = "neutral", oviya_emotion: str = "neutral", user_audio: Optional[np.ndarray] = None):
+        """
+        Add memory triple with emotion tracking
+        
+        🆕 SPEECH-TO-SPEECH: Store user audio for CSM-1B context
+        """
         p = (self.brain.context[:200] if hasattr(self.brain, 'context') and self.brain.context else "")
-        self._memory_triples.append({'q': q, 'p': p, 'r': r})
+        triple = {
+            'q': q, 
+            'p': p, 
+            'r': r,
+            'emotion': user_emotion,
+            'oviya_emotion': oviya_emotion
+        }
+        # 🆕 SPEECH-TO-SPEECH: Store user audio if available
+        if user_audio is not None:
+            triple['q_audio'] = user_audio
+        self._memory_triples.append(triple)
         if len(self._memory_triples) > 50:
             self._memory_triples = self._memory_triples[-50:]
 
     def _format_context_for_tts(self) -> List[Dict]:
-        ctx = []
-        for t in self._memory_triples[-3:]:
-            ctx.append({'text': t['q'], 'speaker_id': 1})
-            ctx.append({'text': t['r'], 'speaker_id': 0})
-        return ctx
+        """
+        Format conversation context for CSM-1B
+        
+        Uses brain's format_conversation_context_for_csm() method for consistency.
+        
+        According to Sesame's format:
+        - Include text and optional audio references
+        - Last 3 turns for optimal context
+        - Speaker IDs: 1 = user, 42 = Oviya
+        """
+        # Use brain's method to format context (preferred)
+        try:
+            return self.brain.format_conversation_context_for_csm(
+                memory_triples=self._memory_triples,
+                include_audio=True
+            )
+        except Exception as e:
+            print(f"⚠️ Brain formatting failed, using fallback: {e}")
+            # Fallback to manual formatting
+            ctx = []
+            
+            # 🆕 HANDLE EMOTION REFERENCE DIRECTORY PATHS: Support both local and VastAI paths
+            emotion_ref_dirs = [
+                Path("data/emotion_references"),  # Local development
+                Path("/workspace/emotion_references"),  # VastAI deployment
+                Path("/workspace/data/emotion_references"),  # Alternative VastAI path
+            ]
+            emotion_map_file = None
+            emotion_ref_dir_found = None
+            
+            # Try to find emotion_map.json in any of the possible directories
+            for emotion_ref_dir in emotion_ref_dirs:
+                potential_file = emotion_ref_dir / "emotion_map.json"
+                if potential_file.exists():
+                    emotion_map_file = potential_file
+                    emotion_ref_dir_found = emotion_ref_dir
+                    break
+            
+            emotion_map = {}
+            if emotion_map_file:
+                try:
+                    with open(emotion_map_file, 'r') as f:
+                        emotion_map = json.load(f)
+                except Exception:
+                    pass
+            
+            for t in self._memory_triples[-3:]:
+                # User turn
+                user_turn = {
+                    'text': t['q'],
+                    'speaker_id': 1
+                }
+                
+                # Add audio reference if available for this emotion
+                user_emotion = t.get('emotion', 'neutral')
+                if user_emotion in emotion_map and emotion_map[user_emotion] and emotion_ref_dir_found:
+                    ref_file = emotion_ref_dir_found / emotion_map[user_emotion][0]['file']
+                    if ref_file.exists():
+                        try:
+                            import torchaudio
+                            audio_tensor, sr = torchaudio.load(str(ref_file))
+                            audio_np = audio_tensor.squeeze().numpy().astype(np.float32)
+                            user_turn['audio'] = audio_np
+                        except Exception:
+                            pass
+                
+                ctx.append(user_turn)
+                
+                # Oviya turn
+                oviya_turn = {
+                    'text': t['r'],
+                    'speaker_id': 42  # Oviya's consistent speaker ID
+                }
+                
+                # Add audio reference for Oviya's emotion if available
+                oviya_emotion = t.get('oviya_emotion', 'neutral')
+                if oviya_emotion in emotion_map and emotion_map[oviya_emotion] and emotion_ref_dir_found:
+                    ref_file = emotion_ref_dir_found / emotion_map[oviya_emotion][0]['file']
+                    if ref_file.exists():
+                        try:
+                            import torchaudio
+                            audio_tensor, sr = torchaudio.load(str(ref_file))
+                            audio_np = audio_tensor.squeeze().numpy().astype(np.float32)
+                            oviya_turn['audio'] = audio_np
+                        except Exception:
+                            pass
+                
+                ctx.append(oviya_turn)
+            
+            return ctx
     
     def _ema_smooth(self, x: np.ndarray, alpha: float = 0.1) -> np.ndarray:
         try:
@@ -1147,11 +1999,19 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str = "anonymous"):
 
                             # Measure latency with CUDA graphs
                             start_time = time.time()
-                            audio_bytes = session.optimized_streamer.generate_voice(
+                            # Removed: optimized_streamer.generate_voice (use csm_streaming instead)
+                            # Use csm_streaming for voice generation
+                            batch_id = await session.csm_streaming.submit_stream_request(
+                                user_id=session.user_id,
                                 text=test_text,
-                                speaker_id=42,  # Oviya's voice
-                                emotion=emotion
+                                emotion=emotion,
+                                speaker_id=42,
+                                conversation_context=[],
+                                user_audio=None,
+                                reference_audio=None,
+                                prosody_params=None
                             )
+                            audio_bytes = b""  # Streamed via get_stream_results
                             latency_ms = (time.time() - start_time) * 1000
 
                             # Send performance results
@@ -1189,7 +2049,9 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str = "anonymous"):
                             print(f"🎵 Processing batch of {len(batch_requests)} requests...")
 
                             # Use optimized streamer for batch processing
-                            batch_results = session.optimized_streamer.generate_batch_voice(batch_requests)
+                            # Removed: optimized_streamer.generate_batch_voice (use csm_streaming instead)
+                            # Batch generation is handled by csm_streaming's batch processor
+                            batch_results = []  # Use csm_streaming batch API
 
                             # Send results back
                             import base64
@@ -1269,21 +2131,20 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str = "anonymous"):
                     })
 
                     # Update session activity
-                    if SESSION_MANAGER_AVAILABLE and session_state and user_id != "anonymous":
-                        try:
-                            session_mgr.update_activity(user_id)
-                        except Exception:
-                            pass  # Fail silently
+                    # Removed: session_manager.py deleted (functionality merged into ConversationSession)
                     # If sentence boundary or token-bucket threshold, trigger early TTS
                     if any(p in partial for p in ['.', '!', '?']) and not session.is_generating:
                         # Bid detection for micro-ack (backchannel is injected in brain already)
                         bid = session.bids.detect_bid(partial, prosody={"energy": 0.05}, pause_ms=300)
                         # We could send a quick ack here if needed
                         session.is_generating = True
+                        # 🆕 SPEECH-TO-SPEECH: Pass user audio if available
+                        user_audio_for_response = session._current_user_audio if session._current_user_audio is not None else None
                         asyncio.create_task(session.generate_response_streaming(
                             websocket,
                             partial,
-                            'neutral'
+                            'neutral',
+                            user_audio=user_audio_for_response
                         ))
                 
                 # Prefer Silero VAD if available to decide end-of-speech
@@ -1321,7 +2182,8 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str = "anonymous"):
                         asyncio.create_task(session.generate_response_streaming(
                             websocket,
                             text,
-                            'neutral'
+                            'neutral',
+                            user_audio=eos_audio if eos_audio is not None else session._current_user_audio
                         ))
                 else:
                     # Energy-based VAD commit: if speaking→silence transition, kick generation
@@ -1346,7 +2208,8 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str = "anonymous"):
                             asyncio.create_task(session.generate_response_streaming(
                                 websocket,
                                 partial or (result['text'] if result else ''),
-                                'neutral'
+                                'neutral',
+                                user_audio=session._current_user_audio
                             ))
 
                 if not result:
@@ -1383,7 +2246,8 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str = "anonymous"):
                     await session.generate_response_streaming(
                         websocket,
                         result['text'],
-                        combined['emotion']
+                        combined['emotion'],
+                        user_audio=session._current_user_audio
                     )
                     session.is_generating = False
     
@@ -1410,11 +2274,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str = "anonymous"):
             pass
 
         # Cleanup session state
-        if SESSION_MANAGER_AVAILABLE and user_id != "anonymous":
-            try:
-                session_mgr.cleanup_expired_sessions()
-            except Exception:
-                pass  # Fail silently
+        # Removed: session_manager.py deleted (functionality merged into ConversationSession)
 
 
 @app.get("/health")

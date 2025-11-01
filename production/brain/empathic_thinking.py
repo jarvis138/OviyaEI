@@ -28,8 +28,21 @@ class EmpathicThinkingEngine:
     """
 
     def __init__(self):
-        # MCP client for thinking server
-        self.thinking_client = MockMCPClient("oviya-thinking")
+        # 🆕 REAL MCP CLIENT: Initialize MCP Thinking client
+        try:
+            from .mcp_client import get_mcp_client
+            self.thinking_client = get_mcp_client("mcp-thinking")
+            if self.thinking_client:
+                # Initialize asynchronously (will be done on first use)
+                self._thinking_initialized = False
+                print("✅ MCP Thinking client ready")
+            else:
+                self.thinking_client = MockMCPClient("oviya-thinking")
+                print("⚠️ MCP Thinking not configured, using mock")
+        except Exception as e:
+            print(f"⚠️ Failed to initialize MCP Thinking: {e}")
+            self.thinking_client = MockMCPClient("oviya-thinking")
+        self._thinking_initialized = False
 
         # Personality pillar mappings
         self.pillar_mappings = {
@@ -188,18 +201,82 @@ class EmpathicThinkingEngine:
         }
 
     async def _dialectical_thinking(self, conflicts: List[str], user_input: str) -> Dict[str, Any]:
-        """Resolve emotional conflicts through dialectical thinking"""
+        """
+        Resolve emotional conflicts through dialectical thinking
+        
+        🆕 CSM-1B Compatible:
+        - Uses MCP Thinking enhanced_thinking for complex conflicts
+        - Returns structured reasoning that enhances CSM-1B context
+        - Affects prosody (more measured when resolving conflicts)
+        """
+        
+        # Initialize MCP client if needed
+        if not self._thinking_initialized and hasattr(self.thinking_client, 'initialize'):
+            try:
+                await self.thinking_client.initialize()
+                self._thinking_initialized = True
+            except Exception as e:
+                print(f"MCP Thinking initialization failed: {e}")
+                self._thinking_initialized = False
 
-        try:
-            result = await self.thinking_client.call_tool("dialectical_thinking", {
-                "conflicting_emotions": conflicts,
-                "user_statement": user_input
-            })
-            return result
+        # Check complexity - use enhanced_thinking for complex conflicts
+        is_complex = len(conflicts) > 2 or self._has_deep_conflicts(conflicts)
 
-        except Exception as e:
-            # Fallback dialectical analysis
+        if is_complex:
+            try:
+                # 🆕 USE ENHANCED THINKING: For complex dialectical reasoning
+                # Format conflicts for MCP Thinking
+                conflict_text = f"Emotional conflicts: {', '.join(conflicts)}. User statement: {user_input}"
+                
+                result = await self.thinking_client.call_tool("enhanced_thinking", {
+                    "thought": conflict_text,
+                    "thought_type": "DIALECTICAL_ANALYSIS",
+                    "strategy": "DIALECTICAL",
+                    "tags": ["emotion", "conflict", "therapy", "dialectical"]
+                })
+                
+                # Parse enhanced thinking result
+                if isinstance(result, dict):
+                    # Extract reasoning from enhanced thinking
+                    reasoning = result.get("reasoning", result.get("text", ""))
+                    if isinstance(reasoning, str):
+                        return {
+                            "response": self._extract_synthesis_from_reasoning(reasoning),
+                            "conflicts_resolved": conflicts,
+                            "synthesis": reasoning,
+                            "thinking_mode": "dialectical",
+                            "enhanced": True
+                        }
+                
+                # Fallback if parsing fails
+                return self._fallback_dialectical_analysis(conflicts, user_input)
+            
+            except Exception as e:
+                print(f"Enhanced thinking failed: {e}")
+                # Fallback to local
+                return self._fallback_dialectical_analysis(conflicts, user_input)
+        
+        else:
+            # Use local dialectical thinking for simple conflicts (faster)
             return self._fallback_dialectical_analysis(conflicts, user_input)
+    
+    def _has_deep_conflicts(self, conflicts: List[str]) -> bool:
+        """Check if conflicts are deep/complex"""
+        # Deep conflicts involve fundamental tensions
+        deep_keywords = ["love", "hate", "hope", "despair", "trust", "fear", "joy", "sadness"]
+        conflict_text = " ".join(conflicts).lower()
+        return any(keyword in conflict_text for keyword in deep_keywords)
+    
+    def _extract_synthesis_from_reasoning(self, reasoning: str) -> str:
+        """Extract dialectical synthesis from enhanced thinking reasoning"""
+        # Look for synthesis patterns in reasoning
+        if "synthesis" in reasoning.lower() or "both" in reasoning.lower():
+            # Extract synthesis sentence
+            sentences = reasoning.split(". ")
+            for sentence in sentences:
+                if "both" in sentence.lower() or "synthesis" in sentence.lower():
+                    return sentence
+        return reasoning[:200]  # Return first 200 chars if no clear synthesis
 
     def _fallback_dialectical_analysis(self, conflicts: List[str], user_input: str) -> Dict[str, Any]:
         """Fallback dialectical conflict resolution"""

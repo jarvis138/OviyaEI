@@ -1,0 +1,34 @@
+🔄 UPDATE OVIYA REPOSITORY ON VAST.AI
+=====================================
+
+Run these commands on your Vast.ai instance:
+
+# Navigate to your repository (if not already there)
+cd OviyaEI
+
+# Check current status
+git status
+git branch
+git log --oneline -5
+
+# Fetch latest changes from remote
+git fetch origin
+
+# Pull latest changes from main branch
+git pull origin main
+
+# Or if you're on dev branch:
+git pull origin dev
+
+# Check what changed
+git log --oneline -10
+git diff --name-only HEAD~1
+
+# If you have local changes that conflict:
+git stash  # Save your changes
+git pull origin dev  # Pull latest
+git stash pop  # Restore your changes
+
+# Verify you're on latest commit
+git log --oneline -1
+

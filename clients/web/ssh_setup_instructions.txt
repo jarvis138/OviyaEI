@@ -1,0 +1,42 @@
+🔑 VAST.AI SSH SETUP INSTRUCTIONS
+====================================
+
+PROBLEM: "Permission denied (publickey)"
+SOLUTION: Add SSH key to Vast.ai instance
+
+METHOD 1: Via Vast.ai Web Interface (Easiest)
+-----------------------------------------------
+1. Go to: https://vast.ai/instances
+2. Find your instance (RTX 5880 Ada)
+3. Click "Details" → "SSH Keys" tab
+4. Add this public key:
+   ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINRMvp2bi0+RFFfVDs/ennn2rSuSxugzjrOkdg0CXR6H oviya-deployment-assistant
+5. Save and wait 30 seconds
+6. Try SSH again
+
+METHOD 2: Via Terminal (If you have working SSH)
+-----------------------------------------------
+# First connect with any working method, then add the key:
+ssh -p 19199 root@175.155.64.172
+# If connected, run:
+echo "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINRMvp2bi0+RFFfVDs/ennn2rSuSxugzjrOkdg0CXR6H oviya-deployment-assistant" >> ~/.ssh/authorized_keys
+chmod 600 ~/.ssh/authorized_keys
+exit
+
+METHOD 3: Check Existing SSH Keys
+-----------------------------------------------
+# List your SSH keys:
+ls -la ~/.ssh/
+
+# Check if you have the correct key:
+cat ~/.ssh/id_ed25519.pub
+
+# If you have a different key, use it instead
+
+CORRECT SSH COMMAND (after key is added):
+-----------------------------------------------
+ssh -p 19199 root@175.155.64.172 -i ~/.ssh/id_ed25519
+
+OR (if using the key I provided):
+ssh -p 19199 root@175.155.64.172
+

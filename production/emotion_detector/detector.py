@@ -1,14 +1,20 @@
 """
-Emotion Detector - Analyzes user's emotional state from text
+Emotion Detector - Analyzes user's emotional state from text and audio
 
 This module detects the user's emotional state to provide context
 to Oviya's brain for more empathetic responses.
+Supports both text-based and acoustic emotion detection.
 """
 
 import json
 import re
 from typing import Dict, Tuple, Optional, List
 from pathlib import Path
+
+try:
+    import numpy as np
+except ImportError:
+    np = None
 
 
 class EmotionDetector:
@@ -77,6 +83,98 @@ class EmotionDetector:
             "little": 0.2,
             "kind of": 0.3
         }
+    
+    def detect_emotion_from_audio(
+        self,
+        audio: np.ndarray,
+        sample_rate: int = 16000,
+        text: Optional[str] = None,
+        acoustic_weight: float = 0.6
+    ) -> Dict:
+        """
+        Detect emotion from audio using acoustic features
+        
+        🆕 INTEGRATED ACOUSTIC EMOTION DETECTION
+        
+        Args:
+            audio: Audio numpy array (mono, float32)
+            sample_rate: Sample rate of audio
+            text: Optional text transcript for combined detection
+            acoustic_weight: Weight for acoustic detection (0-1), text gets (1-acoustic_weight)
+        
+        Returns:
+            Dict with emotion, intensity, confidence, and reasoning
+        """
+        if np is None:
+            raise ImportError("numpy is required for audio emotion detection")
+        
+        try:
+            # Try to import acoustic emotion detector
+            from voice.acoustic_emotion_detector import AcousticEmotionDetector
+            
+            # Initialize acoustic detector if not already done
+            if not hasattr(self, '_acoustic_detector'):
+                self._acoustic_detector = AcousticEmotionDetector()
+            
+            # Detect emotion from audio
+            acoustic_result = self._acoustic_detector.detect_emotion(audio, sample_rate)
+            
+            # If text is provided, combine with text-based detection
+            if text:
+                text_result = self.detect_emotion(text)
+                combined = self._acoustic_detector.combine_with_text_emotion(
+                    acoustic_result,
+                    text_result['emotion'],
+                    text_result['confidence'],
+                    acoustic_weight=acoustic_weight
+                )
+                
+                return {
+                    "emotion": combined['emotion'],
+                    "intensity": acoustic_result.get('arousal', text_result['intensity']),
+                    "confidence": combined['confidence'],
+                    "source": combined['source'],
+                    "acoustic_emotion": acoustic_result['emotion'],
+                    "text_emotion": text_result['emotion'],
+                    "acoustic_features": acoustic_result.get('acoustic_features', {}),
+                    "reasoning": f"Combined: acoustic={acoustic_result['emotion']} (conf={acoustic_result['confidence']:.2f}), text={text_result['emotion']} (conf={text_result['confidence']:.2f})"
+                }
+            else:
+                # Only acoustic detection
+                return {
+                    "emotion": acoustic_result['oviya_emotions'][0] if acoustic_result['oviya_emotions'] else 'neutral',
+                    "intensity": acoustic_result.get('arousal', 0.7),
+                    "confidence": acoustic_result['confidence'],
+                    "source": "acoustic_only",
+                    "acoustic_features": acoustic_result.get('acoustic_features', {}),
+                    "reasoning": f"Acoustic detection: {acoustic_result['emotion']} (confidence={acoustic_result['confidence']:.2f})"
+                }
+        except ImportError:
+            # Fallback to text-only if acoustic detector not available
+            print("⚠️ Acoustic emotion detector not available, using text-only detection")
+            if text:
+                return self.detect_emotion(text)
+            else:
+                return {
+                    "emotion": "neutral",
+                    "intensity": 0.5,
+                    "confidence": 0.5,
+                    "source": "fallback",
+                    "reasoning": "Acoustic detection unavailable, no text provided"
+                }
+        except Exception as e:
+            print(f"⚠️ Acoustic emotion detection failed: {e}")
+            # Fallback to text-only
+            if text:
+                return self.detect_emotion(text)
+            else:
+                return {
+                    "emotion": "neutral",
+                    "intensity": 0.5,
+                    "confidence": 0.5,
+                    "source": "error_fallback",
+                    "reasoning": f"Error in acoustic detection: {e}"
+                }
     
     def detect_emotion(
         self, 

@@ -44,8 +44,21 @@ class CrisisDetectionSystem:
             'critical': 4
         }
 
-        # MCP client for AI Therapist
-        self.ai_therapist = MockMCPClient("ai-therapist")
+        # 🆕 REAL MCP CLIENT: Initialize AI Therapist MCP client
+        try:
+            from .mcp_client import get_mcp_client
+            self.ai_therapist = get_mcp_client("ai-therapist")
+            if self.ai_therapist:
+                # Initialize asynchronously (will be done on first use)
+                self._therapist_initialized = False
+                print("✅ AI Therapist MCP client ready")
+            else:
+                self.ai_therapist = MockMCPClient("ai-therapist")
+                print("⚠️ AI Therapist MCP not configured, using mock")
+        except Exception as e:
+            print(f"⚠️ Failed to initialize AI Therapist MCP: {e}")
+            self.ai_therapist = MockMCPClient("ai-therapist")
+        self._therapist_initialized = False
 
         # Emergency resources by location (would be expanded)
         self.emergency_resources = {
@@ -168,24 +181,70 @@ class CrisisDetectionSystem:
         }
 
     async def _therapist_crisis_assessment(self, user_input: str, conversation_history: List[str]) -> Dict[str, Any]:
-        """Advanced crisis assessment using AI Therapist MCP"""
+        """
+        Advanced crisis assessment using AI Therapist MCP
+        
+        🆕 CSM-1B Compatible:
+        - Uses correct AI Therapist MCP tool: crisis_intervention
+        - Returns data that enhances CSM-1B conversation context
+        - Crisis level affects prosody (calmer for critical situations)
+        """
+
+        # Initialize MCP client if needed
+        if not self._therapist_initialized and hasattr(self.ai_therapist, 'initialize'):
+            try:
+                await self.ai_therapist.initialize()
+                self._therapist_initialized = True
+            except Exception as e:
+                print(f"AI Therapist MCP initialization failed: {e}")
+                self._therapist_initialized = False
 
         try:
-            assessment = await self.ai_therapist.call_tool("assess_crisis_level", {
-                "text": user_input,
-                "conversation_history": conversation_history[-10:],
-                "include_coping_strategies": True,
-                "include_emergency_resources": True
+            # 🆕 USE CORRECT TOOL: crisis_intervention (not assess_crisis_level)
+            # First determine crisis level from local assessment
+            local_assessment = self._local_crisis_assessment(user_input, conversation_history)
+            crisis_level = local_assessment.get("risk_level", "low")
+            
+            # Map to AI Therapist MCP crisis levels
+            crisis_level_mapping = {
+                "none": "mild",
+                "low": "mild",
+                "moderate": "moderate",
+                "high": "severe",
+                "critical": "emergency"
+            }
+            therapist_crisis_level = crisis_level_mapping.get(crisis_level, "moderate")
+            
+            # 🆕 CALL CORRECT TOOL: crisis_intervention
+            assessment = await self.ai_therapist.call_tool("crisis_intervention", {
+                "crisis_level": therapist_crisis_level,  # mild, moderate, severe, emergency
+                "thoughts": user_input,
+                "immediate_concerns": local_assessment.get("crisis_types", [])
             })
 
-            return {
-                "therapist_crisis_detected": assessment.get("crisis_detected", False),
-                "therapist_risk_level": assessment.get("risk_level", "low"),
-                "therapist_confidence": assessment.get("confidence", 0.5),
-                "therapist_crisis_types": assessment.get("crisis_types", []),
-                "therapist_coping_strategies": assessment.get("coping_strategies", []),
-                "assessment_method": "ai_therapist_mcp"
-            }
+            # Parse response (AI Therapist MCP returns structured data)
+            if isinstance(assessment, dict):
+                # Extract crisis information
+                crisis_detected = therapist_crisis_level in ["moderate", "severe", "emergency"]
+                
+                return {
+                    "therapist_crisis_detected": crisis_detected,
+                    "therapist_risk_level": crisis_level,  # Keep local level for consistency
+                    "therapist_confidence": assessment.get("confidence", 0.7) if "confidence" in assessment else 0.7,
+                    "therapist_crisis_types": local_assessment.get("crisis_types", []),
+                    "therapist_intervention": assessment.get("intervention", assessment.get("text", "")),
+                    "therapist_coping_strategies": assessment.get("strategies", []),
+                    "assessment_method": "ai_therapist_mcp"
+                }
+            else:
+                # Fallback if response format unexpected
+                return {
+                    "therapist_crisis_detected": crisis_level in ["moderate", "high", "critical"],
+                    "therapist_risk_level": crisis_level,
+                    "therapist_confidence": 0.6,
+                    "therapist_crisis_types": local_assessment.get("crisis_types", []),
+                    "assessment_method": "ai_therapist_mcp"
+                }
 
         except Exception as e:
             print(f"AI Therapist assessment failed: {e}")
@@ -261,18 +320,30 @@ class CrisisDetectionSystem:
             )
 
         elif risk_level == "moderate":
+            # 🆕 GET COPING STRATEGIES: Use AI Therapist MCP for structured strategies
+            coping_strategies = await self.get_coping_strategies(
+                crisis_data.get("crisis_types", []),
+                urgency="high"
+            )
+            
             recommended_actions = [
                 "USE_PROVIDED_COPING_STRATEGIES",
                 "CONTACT_THERAPIST_OR_COUNSELOR",
                 "REACH_OUT_TO_SUPPORT_NETWORK",
                 "MONITOR_SYMPTOMS_CLOSELY"
             ]
-            immediate_response = (
+            
+            # Build response with coping strategies
+            response_text = (
                 "I hear how much pain you're in, and I'm here with you. "
                 "While this isn't an immediate emergency, these feelings are serious. "
-                "Please consider reaching out to a mental health professional. "
-                "Here are some coping strategies that might help right now..."
+                "Please consider reaching out to a mental health professional."
             )
+            
+            if coping_strategies:
+                response_text += " Here are some coping strategies that might help right now: " + ". ".join(coping_strategies[:3])
+            
+            immediate_response = response_text
 
         else:
             # Low risk - still provide support
@@ -320,22 +391,83 @@ class CrisisDetectionSystem:
     async def get_emergency_resources(self, location: str = "global") -> Dict[str, Any]:
         """Get comprehensive emergency resources for a location"""
 
-        try:
-            # Try AI Therapist MCP for location-specific resources
-            resources = await self.ai_therapist.call_tool("get_crisis_resources", {
-                "location": location,
-                "include_hotlines": True,
-                "include_online_resources": True
-            })
+        # Initialize MCP client if needed
+        if not self._therapist_initialized and hasattr(self.ai_therapist, 'initialize'):
+            try:
+                await self.ai_therapist.initialize()
+                self._therapist_initialized = True
+            except Exception as e:
+                print(f"AI Therapist MCP initialization failed: {e}")
 
-            if resources and "resources" in resources:
-                return resources["resources"]
-
-        except Exception as e:
-            print(f"Therapist resource lookup failed: {e}")
-
-        # Fallback to local resources
+        # Fallback to local resources (AI Therapist MCP doesn't have get_crisis_resources tool)
+        # The crisis_intervention tool provides intervention guidance, not resource lists
         return self._get_emergency_resources(location, "general")
+    
+    async def get_coping_strategies(
+        self, 
+        crisis_types: List[str], 
+        urgency: str = "medium"
+    ) -> List[str]:
+        """
+        Get coping strategies from AI Therapist MCP
+        
+        🆕 CSM-1B Compatible:
+        - Strategies can be integrated into CSM-1B conversation context
+        - Affects prosody (calmer, more measured when sharing strategies)
+        
+        Args:
+            crisis_types: List of detected crisis types
+            urgency: low, medium, high
+            
+        Returns:
+            List of coping strategies
+        """
+        # Initialize MCP client if needed
+        if not self._therapist_initialized and hasattr(self.ai_therapist, 'initialize'):
+            try:
+                await self.ai_therapist.initialize()
+                self._therapist_initialized = True
+            except Exception as e:
+                print(f"AI Therapist MCP initialization failed: {e}")
+                return []
+
+        try:
+            # Map crisis types to challenge types
+            challenge_mapping = {
+                "suicidal": "purpose_questioning",
+                "self_harm": "performance_anxiety",
+                "severe_depression": "overwhelm",
+                "panic_attack": "overwhelm",
+                "anxious": "performance_anxiety",
+                "isolation": "isolation"
+            }
+            
+            challenge_type = challenge_mapping.get(
+                crisis_types[0] if crisis_types else "overwhelm",
+                "overwhelm"
+            )
+            
+            # 🆕 CALL CORRECT TOOL: get_coping_strategies
+            result = await self.ai_therapist.call_tool("get_coping_strategies", {
+                "challenge_type": challenge_type,
+                "preferred_approach": "practical",
+                "urgency": urgency
+            })
+            
+            # Extract strategies from response
+            if isinstance(result, dict):
+                strategies = result.get("strategies", [])
+                if isinstance(strategies, list):
+                    return strategies
+                elif isinstance(result.get("text"), str):
+                    # Parse text response if strategies not in structured format
+                    return [result["text"]]
+            
+            return []
+        
+        except Exception as e:
+            print(f"Failed to get coping strategies: {e}")
+            return []
 
 class MockMCPClient:
     """Mock MCP client until real SDK is available"""

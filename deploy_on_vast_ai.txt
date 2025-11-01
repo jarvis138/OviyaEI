@@ -1,0 +1,81 @@
+🚀 RUN THESE COMMANDS ON YOUR VAST.AI INSTANCE
+===============================================
+
+You are at: root@C.27417057:~$
+Run these commands in order:
+
+# 1. Check your environment
+pwd
+whoami
+nvidia-smi
+ls -la
+
+# 2. Update system and install dependencies
+apt update && apt upgrade -y
+apt install -y python3 python3-pip python3-venv git curl wget htop python3-dev build-essential
+
+# 3. Install Ollama
+curl -fsSL https://ollama.ai/install.sh | sh
+
+# 4. Clone Oviya repository
+git clone https://github.com/jarvis138/OviyaEI.git
+cd OviyaEI/production
+
+# 5. Setup Python environment
+python3 -m venv venv
+source venv/bin/activate
+pip install --upgrade pip
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+pip install -r requirements.txt
+
+# 6. Configure environment
+export HUGGINGFACE_TOKEN="[REDACTED_TOKEN]"
+export OVIYA_SECRET="oviya_secure_secret_2024"
+export OVIYA_ENV="production"
+export CLOUD_GPU_AVAILABLE="true"
+
+# 7. Start Ollama and download model
+ollama serve &
+sleep 15
+ollama pull llama3.2:3b
+
+# 8. Test systems
+python3 -c "
+try:
+    from brain.llm_brain import OviyaBrain
+    brain = OviyaBrain()
+    response = brain.think('Hello, deployment test')
+    print('✅ Brain system working')
+    print(f'Response keys: {list(response.keys())}')
+except Exception as e:
+    print(f'❌ Brain test failed: {e}')
+"
+
+python3 -c "
+try:
+    from voice.csm_1b_generator_optimized import get_optimized_streamer
+    streamer = get_optimized_streamer()
+    audio = streamer.generate_voice('Voice deployment test', speaker_id=42)
+    print(f'✅ Voice system working: {len(audio)} bytes')
+except Exception as e:
+    print(f'❌ Voice test failed: {e}')
+"
+
+# 9. Start Oviya WebSocket server
+nohup python3 websocket_server.py > websocket.log 2>&1 &
+
+# 10. Check deployment
+sleep 10
+ps aux | grep python
+curl http://localhost:8000/health
+
+echo ""
+echo "🎉 DEPLOYMENT COMPLETE!"
+echo "======================="
+echo "🌐 WebSocket Server: http://localhost:8000"
+echo "📋 Logs: tail -f websocket.log"
+echo ""
+echo "To access from your local machine:"
+echo "ssh -p 19199 root@175.155.64.172 -L 8080:localhost:8080"
+echo "Then visit: http://localhost:8080"
+

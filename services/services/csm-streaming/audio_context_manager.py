@@ -265,7 +265,7 @@ class AudioContextManager:
         # Add user audio if available
         if context.user_audio is not None:
             conversation.append({
-                "role": "0",  # User speaker
+                "role": "1",  # User speaker ID (CSM-1B format: 1=user, 42=Oviya)
                 "content": [
                     {"type": "text", "text": "[user speech]"},
                     {"type": "audio", "data": context.user_audio}
@@ -278,7 +278,7 @@ class AudioContextManager:
         
         # Add current text to generate
         conversation.append({
-            "role": "1",  # AI speaker
+            "role": "42",  # Oviya's speaker ID (CSM-1B format)
             "content": [
                 {"type": "text", "text": text}
             ]

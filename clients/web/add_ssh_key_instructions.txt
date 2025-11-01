@@ -1,0 +1,50 @@
+🚨 CRITICAL: ADD SSH KEY TO VAST.AI NOW
+==========================================
+
+❌ WHY: You're getting "Permission denied (publickey)"
+✅ HOW: Add key through Vast.ai web interface
+
+📋 EXACT STEPS:
+---------------
+
+1️⃣ OPEN: https://vast.ai/instances
+   (Open this URL in your browser NOW)
+
+2️⃣ FIND: Your RTX 5880 Ada instance 
+   (Should show IP: 175.155.64.172)
+
+3️⃣ CLICK: "Details" button
+   (Blue button next to your instance)
+
+4️⃣ CLICK: "SSH Keys" tab
+   (At the top of the details page)
+
+5️⃣ PASTE THIS EXACT KEY:
+   ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINRMvp2bi0+RFFfVDs/ennn2rSuSxugzjrOkdg0CXR6H oviya-deployment-assistant
+
+6️⃣ CLICK: "Save" button
+   (Green save button)
+
+7️⃣ WAIT: 30 seconds
+   (Vast.ai needs time to apply the key)
+
+8️⃣ THEN TRY: ssh -p 19199 root@175.155.64.172
+
+🎯 SUCCESS INDICATORS:
+--------------------
+✅ You see a Linux prompt (not "Permission denied")
+✅ You see something like: root@vast-ai-instance:~#
+✅ No more authentication errors
+
+🚫 FAILURE INDICATORS:
+--------------------
+❌ Still "Permission denied (publickey)"
+❌ Still "Welcome to vast.ai" then error
+
+⚠️  IF STILL FAILS:
+-----------------
+• Check you clicked "Save" 
+• Try refreshing the Vast.ai page
+• Wait another 60 seconds
+• Check if Vast.ai allows password login instead
+
