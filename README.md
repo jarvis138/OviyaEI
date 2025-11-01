@@ -47,6 +47,7 @@ Oviya is an advanced therapeutic AI system that combines:
 - Python 3.9+
 - CUDA-capable GPU (recommended for CSM-1B)
 - Ollama with Llama 3.2:3B model
+- HuggingFace account with API token
 
 ### Installation
 
@@ -60,6 +61,7 @@ cd production
 pip install -r requirements.txt
 
 # Setup CSM-1B and emotion references
+export HUGGINGFACE_TOKEN="your_token_here"
 python3 complete_setup.py
 ```
 
@@ -117,7 +119,7 @@ Oviya EI/
 
 ## 📊 Recent Updates
 
-### Codebase Cleanup (Latest)
+### Codebase Cleanup (Latest - November 2024)
 - ✅ Removed ~69 redundant files
 - ✅ Fixed all broken imports
 - ✅ Consolidated duplicate configurations
