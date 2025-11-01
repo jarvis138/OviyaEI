@@ -1,194 +1,30 @@
-# Oviya EI 🤖💙
+# Oviya EI - Emotional Intelligence Companion
 
-## Enterprise-Grade Therapeutic AI Platform
+> A speech-to-speech native, emotionally intelligent AI companion designed for professional mental health support with clinical safety standards and comprehensive governance frameworks.
 
-**A clinically-validated, enterprise therapeutic AI system designed for professional mental health support with clinical safety standards and comprehensive governance frameworks.**
+## 🎯 Overview
 
-[![GitHub stars](https://img.shields.io/github/stars/your-repo/oviya-ei)](https://github.com/your-repo/oviya-ei)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/python-3.10+-blue.svg)](https://python.org)
-[![Clinical Safety](https://img.shields.io/badge/clinical-safety_verified-green.svg)]()
-[![Enterprise Ready](https://img.shields.io/badge/enterprise-ready-blue.svg)]()
+Oviya is an advanced therapeutic AI system that combines:
+- **CSM-1B Conversational Speech Model** - Ultra-low latency, emotional voice synthesis
+- **Mimi Codec** - Real-time RVQ-level streaming for natural conversations
+- **18 Therapeutic Frameworks** - CBT, DBT, EFT, Rogerian, and more
+- **5-Pillar Personality System** - Ma, Ahimsa, Jeong, Logos, Lagom
+- **26+ MCP Servers** - Specialized modules for mental health support
+- **Clinical Safety & Governance** - HIPAA compliance, crisis detection, monitoring
 
----
+## 🏗️ Architecture
 
-## 🚀 **What is Oviya EI?**
-
-Oviya EI is a revolutionary therapeutic AI companion that combines:
-
-- **🧠 30+ Clinically Validated Therapeutic Systems**
-- **🏥 Enterprise-Grade Clinical Safety Standards**
-- **🛡️ HIPAA-Compliant Privacy Protection**
-- **🌍 Cultural Wisdom Integration (5 Traditions)**
-- **⚡ Real-Time Voice Processing (<120ms latency)**
-- **🔬 Continuous Experimental Governance**
-- **📊 Comprehensive Monitoring & Analytics**
-
-### **Core Mission**
-*"To provide accessible, clinically-sound therapeutic support through advanced AI, maintaining the highest standards of safety, ethics, and therapeutic effectiveness."*
-
----
-
-## 🏗️ **Architecture Overview**
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    Oviya EI - Enterprise Platform                │
-├─────────────────────────────────────────────────────────────────┤
-│  🎭 THERAPEUTIC BRAIN (18 Systems)                              │
-│  ├─ Clinical Crisis Detection & Intervention                    │
-│  ├─ Attachment Style Personalization                            │
-│  ├─ Emotional Reciprocity Engine                                │
-│  ├─ Cultural Wisdom Integration (Ma, Jeong, Ahimsa, Logos, Lagom)
-│  ├─ Advanced Memory Systems (ChromaDB + MCP)                    │
-│  ├─ Epistemic Prosody & Therapeutic Silence                     │
-│  └─ Personality Conditioning & Vulnerability Reciprocation     │
-├─────────────────────────────────────────────────────────────────┤
-│  🎵 VOICE SYNTHESIS PIPELINE (10+ Systems)                      │
-│  ├─ Ultra-Low Latency Streaming (<120ms p95)                    │
-│  ├─ Neural Prosody Control & 28+ Emotion Library               │
-│  ├─ CSM-1B Conversational Speech Model                          │
-│  ├─ Professional Audio Mastering                                │
-│  ├─ Voice Learning & Adaptation                                 │
-│  └─ Real-Time Voice Processing                                  │
-├─────────────────────────────────────────────────────────────────┤
-│  🛡️ SAFETY & GOVERNANCE LAYER                                   │
-│  ├─ PII Redaction (HIPAA Compliant)                             │
-│  ├─ Clinical Crisis Detection (Zero False Negatives)           │
-│  ├─ Enterprise Governance Framework                             │
-│  ├─ Continuous Evaluation Dashboard                             │
-│  ├─ Experimental Component Management (35+ Features)           │
-│  └─ Regulatory Compliance Monitoring                            │
-├─────────────────────────────────────────────────────────────────┤
-│  🔬 MCP ECOSYSTEM (26+ Servers)                                 │
-│  ├─ Mental Health & Psychology MCPs                            │
-│  ├─ Therapeutic Content Generation                             │
-│  ├─ Cultural Context Adaptation                                │
-│  ├─ Safety & Ethics Validation                                 │
-│  └─ Research & Analytics Integration                           │
-└─────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## 🎯 **Key Features**
-
-### **🧠 Advanced Therapeutic Intelligence**
-- **18 Specialized Therapeutic Systems** including CBT, DBT, EFT, and Rogerian frameworks
-- **Cultural Wisdom Integration** - Ma (Japanese), Jeong (Korean), Ahimsa (Indian), Logos (Greek), Lagom (Scandinavian)
-- **Emotional Reciprocity** - AI that understands and responds to human emotions therapeutically
-- **Personality Conditioning** - Adaptive therapeutic approach based on user personality
-- **Memory Systems** - Long-term therapeutic relationship building with ChromaDB
-
-### **🎵 Professional Voice Synthesis**
-- **CSM-1B Integration** - State-of-the-art conversational speech model
-- **Neural Prosody Control** - Emotionally expressive voice modulation
-- **Ultra-Low Latency** - <120ms p95 response time for real-time conversation
-- **Voice Consistency** - Single therapeutic voice personality maintained
-- **Multi-Format Support** - WAV, streaming audio, WebRTC integration
-
-### **🛡️ Enterprise Clinical Safety**
-- **HIPAA-Compliant PII Redaction** - Automatic privacy protection
-- **Clinical Crisis Detection** - Zero-tolerance safety protocols
-- **Therapeutic Boundary Enforcement** - Ethical AI-human interaction limits
-- **Comprehensive Logging** - Full audit trails for clinical oversight
-- **Regulatory Compliance** - Ready for healthcare certification
-
-### **🔬 Experimental Governance Framework**
-- **35+ Experimental Features** safely managed under governance
-- **Quantitative Graduation Criteria** - Data-driven feature promotion
-- **Clinical Validation Pipeline** - All features clinically reviewed
-- **Circuit Breaker Pattern** - Automatic failure isolation
-- **Continuous Evaluation** - Real-time performance monitoring
-
----
-
-## 📊 **Performance Metrics**
-
-| **Metric** | **Value** | **Target** | **Status** |
-|------------|-----------|------------|------------|
-| **Response Latency (p95)** | 118ms | ≤120ms | ✅ **ACHIEVED** |
-| **Integration Rate** | 100% | 100% | ✅ **COMPLETE** |
-| **Test Coverage** | ≥95% | ≥95% | ✅ **ACHIEVED** |
-| **Safety Violations** | 0 | 0 | ✅ **MAINTAINED** |
-| **Clinical Accuracy** | 92% | ≥90% | ✅ **ACHIEVED** |
-| **Cultural Coverage** | 5 traditions | 5+ | ✅ **COMPLETE** |
-
----
-
-## 🚀 **Quick Start**
-
-### **Prerequisites**
-- Python 3.10+
-- CUDA-compatible GPU (recommended for voice synthesis)
-- 16GB+ RAM
-- Ollama with Llama 3.2:3B model
-- HuggingFace account with API token
-
-### **Installation**
-
-```bash
-# Clone the repository
-git clone https://github.com/your-repo/oviya-ei.git
-cd oviya-ei
-
-# Set up environment variables (REQUIRED)
-cd production
-./setup_environment.sh
-# Edit .env file with your HuggingFace token and secret key
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Initialize models
-python setup_complete_system.sh
-```
-
-### **Environment Setup**
-```bash
-# Required: HuggingFace API Token
-export HUGGINGFACE_TOKEN="hf_your_token_here"
-
-# Required: Application Secret Key
-export OVIYA_SECRET="your_secure_secret_key"
-
-# Optional: Enable cloud GPU
-export CLOUD_GPU_AVAILABLE=true
-```
-
-### **Basic Usage**
-
-```python
-from production.brain.llm_brain import OviyaBrain
-
-# Initialize therapeutic AI
-brain = OviyaBrain()
-
-# Start therapeutic conversation
-response = brain.think("I'm feeling really anxious about work")
-print(response["text"])  # Therapeutic response with emotional support
-
-# Voice synthesis (optional)
-from production.voice.csm_1b_generator_optimized import get_optimized_streamer
-voice = get_optimized_streamer()
-audio = voice.generate_voice("I'm here to support you through this.", emotion="empathetic")
-```
-
----
-
-## 🔧 **System Architecture**
-
-### **4-Layer Architecture**
+### 4-Layer Architecture
 
 1. **🎭 Therapeutic Brain Layer**
    - LLM-based response generation (Ollama + Llama 3.2:3B)
    - 18 therapeutic frameworks integration
-   - Cultural wisdom adaptation
+   - Cultural wisdom adaptation (Ma, Jeong, Ahimsa, Logos, Lagom)
    - Memory and personality systems
 
 2. **🎵 Voice Synthesis Layer**
    - CSM-1B conversational speech model
-   - Real-time audio processing
+   - Real-time audio processing with RVQ streaming
    - Emotion-driven voice modulation
    - Professional audio mastering
 
@@ -204,232 +40,143 @@ audio = voice.generate_voice("I'm here to support you through this.", emotion="e
    - Cultural context adaptation
    - Research integration
 
-### **Key Components**
+## 🚀 Quick Start
 
-#### **Brain Systems (`production/brain/`)**
-- `llm_brain.py` - Main therapeutic intelligence
-- `crisis_detection.py` - Clinical safety monitoring
-- `emotional_reciprocity.py` - Therapeutic emotional matching
-- `cultural systems` - Cross-cultural therapeutic adaptation
+### Prerequisites
 
-#### **Voice Systems (`production/voice/`)**
-- `csm_1b_generator_optimized.py` - Voice synthesis engine
-- `whisper_client.py` - Speech-to-text processing
-- `emotion_blender.py` - Voice emotion modulation
-- `audio_postprocessor.py` - Professional audio mastering
+- Python 3.9+
+- CUDA-capable GPU (recommended for CSM-1B)
+- Ollama with Llama 3.2:3B model
 
-#### **Governance Systems (`production/shared/governance/`)**
-- `graduation_ledger.py` - Component promotion tracking
-- `clinical_governance.py` - Clinical validation framework
-- `contract_testing.py` - Safety validation
+### Installation
 
----
-
-## 🧪 **Testing & Validation**
-
-### **Comprehensive Test Suite**
 ```bash
-# Run all tests
+# Clone repository
+git clone <repository-url>
+cd "Oviya EI"
+
+# Install dependencies
 cd production
-python test_advanced_suites.py
+pip install -r requirements.txt
 
-# Run governance validation
-python experimental/test_governance_integration.py
-
-# Run configuration validation
-python tests/test_config_loading.py
-
-# Baseline integrity check
-python scripts/verify_baseline.py
+# Setup CSM-1B and emotion references
+python3 complete_setup.py
 ```
 
-### **Test Coverage**
-- **Unit Tests**: Individual component validation
-- **Integration Tests**: End-to-end system validation
-- **Performance Tests**: Latency and throughput validation
-- **Safety Tests**: Clinical safety protocol validation
-- **Governance Tests**: Experimental framework validation
+### Run Server
 
----
-
-## 📈 **Clinical Validation**
-
-### **Therapeutic Effectiveness**
-- **Clinical Frameworks**: CBT, DBT, EFT, Rogerian, Cultural therapies
-- **Safety Protocols**: Crisis detection, boundary enforcement, dependency prevention
-- **Cultural Competence**: 5 major cultural therapeutic traditions
-- **Ethical Standards**: HIPAA compliance, therapeutic boundaries, clinical oversight
-
-### **Clinical Metrics**
-- **Response Quality**: Clinically appropriate therapeutic responses
-- **Safety Compliance**: Zero clinical safety violations
-- **Cultural Sensitivity**: Appropriate cultural adaptation
-- **Therapeutic Alliance**: Building trust and therapeutic relationships
-
----
-
-## 🔒 **Security & Compliance**
-
-### **Clinical Safety**
-- **PII Redaction**: Automatic HIPAA-compliant privacy protection
-- **Crisis Detection**: Real-time clinical safety monitoring
-- **Therapeutic Boundaries**: Ethical interaction limits
-- **Audit Trails**: Complete clinical oversight logging
-
-### **Enterprise Security**
-- **Data Encryption**: End-to-end encryption for sensitive data
-- **Access Control**: Role-based access for clinical oversight
-- **Compliance Monitoring**: Continuous regulatory compliance
-- **Incident Response**: Automated safety incident handling
-
----
-
-## 🚀 **Deployment & Scaling**
-
-### **Production Deployment**
 ```bash
-# Deploy to production
 cd production
-docker-compose up -d
-
-# Monitor system health
-python dashboard/evaluation_dashboard.py
+python3 websocket_server.py
 ```
 
-### **Scaling Architecture**
-- **Horizontal Scaling**: Multiple therapeutic AI instances
-- **Load Balancing**: Intelligent conversation routing
-- **Database Sharding**: User data distribution
-- **CDN Integration**: Global voice model distribution
+## 📁 Project Structure
 
-### **Cloud Infrastructure**
-- **GPU Optimization**: RTX 4090/5880 Ada support
-- **Auto-scaling**: Demand-based resource allocation
-- **High Availability**: Multi-region deployment
-- **Disaster Recovery**: Automated failover systems
+```
+Oviya EI/
+├── production/          # Main production codebase
+│   ├── brain/          # Therapeutic intelligence systems
+│   ├── voice/          # CSM-1B, Mimi, prosody engines
+│   ├── clients/        # Web, mobile, admin clients
+│   ├── services/       # Microservices
+│   └── mcp-ecosystem/  # 26+ MCP servers
+├── core/               # Core modules
+├── corpus/             # Training data
+└── clients/            # Client applications
+```
 
----
+## 🔧 Key Features
 
-## 📚 **Documentation**
+### Speech-to-Speech Native
+- Real-time audio processing with Unified VAD+STT pipeline
+- CSM-1B RVQ-level streaming for ultra-low latency
+- User audio captured and used for conversation context
+- Emotion-expressive voice synthesis
 
-### **Technical Documentation**
-- [Architecture Overview](docs/architecture.md)
-- [API Reference](docs/api.md)
-- [Deployment Guide](docs/deployment.md)
-- [Clinical Safety Protocols](docs/clinical_safety.md)
+### Emotional Intelligence
+- 28+ emotion library (Tier 1-3)
+- Emotion blending and interpolation
+- Temporal emotion tracking
+- Acoustic emotion detection
+- Emotional reasoning engine
 
-### **Clinical Documentation**
-- [Therapeutic Frameworks](docs/therapeutic_frameworks.md)
-- [Cultural Integration](docs/cultural_integration.md)
-- [Safety Validation](docs/safety_validation.md)
-- [Clinical Oversight](docs/clinical_oversight.md)
+### Therapeutic Systems
+- 18 therapeutic frameworks integrated
+- Crisis detection and intervention
+- Empathic thinking engine
+- Secure base system
+- Vulnerability reciprocation
+- Strategic silence (Ma - 間)
 
-### **Governance Documentation**
-- [Experimental Framework](docs/governed_experimental_framework_whitepaper.md)
-- [Graduation Process](docs/graduation_process.md)
-- [Clinical Validation](docs/clinical_validation.md)
+### Cultural Wisdom
+- **Ma (Japanese)** - Contemplative space, slower speech, pauses
+- **Ahimsa (Indian)** - Compassion, warmer, gentler prosody
+- **Jeong (Korean)** - Emotional connection, expressive intonation
+- **Logos (Greek)** - Rational grounding, measured prosody
+- **Lagom (Scandinavian)** - Balanced prosody
 
----
+## 📊 Recent Updates
 
-## 🤝 **Contributing**
+### Codebase Cleanup (Latest)
+- ✅ Removed ~69 redundant files
+- ✅ Fixed all broken imports
+- ✅ Consolidated duplicate configurations
+- ✅ Optimized codebase structure
+- ✅ Created comprehensive backup
 
-We welcome contributions from clinicians, AI researchers, and mental health professionals.
+### CSM-1B Integration
+- ✅ CSM-1B model loading and verification
+- ✅ RVQ-level streaming implementation
+- ✅ Emotion reference audio system
+- ✅ Multi-TTS emotion extraction
+- ✅ Conversation context formatting
 
-### **Development Setup**
+### Emotional Intelligence Enhancements
+- ✅ Emotion embeddings system
+- ✅ Temporal emotion tracking
+- ✅ Emotional reasoning engine
+- ✅ Emotion blender and library
+- ✅ Cultural wisdom integration
+
+## 🧪 Testing
+
 ```bash
-# Fork and clone
-git clone https://github.com/your-repo/oviya-ei.git
-cd oviya-ei
-
-# Create feature branch
-git checkout -b feature/your-feature
-
-# Run tests before committing
-cd production && python test_advanced_suites.py
+cd production
+python3 test_complete_pipeline.py
 ```
 
-### **Clinical Collaboration**
-- **Clinicians**: Help validate therapeutic effectiveness
-- **AI Researchers**: Contribute to model improvements
-- **Cultural Experts**: Enhance cross-cultural therapeutic adaptation
-- **Safety Experts**: Strengthen clinical safety protocols
+## 📚 Documentation
 
-### **Clinical Review Process**
-All therapeutic features undergo:
-1. **Clinical Safety Review** - Licensed mental health professionals
-2. **Ethical Assessment** - Clinical ethicists
-3. **Cultural Validation** - Cross-cultural mental health experts
-4. **Safety Testing** - Comprehensive validation protocols
+- [Setup Guide](production/SETUP_COMPLETE.md)
+- [CSM-1B Verification](production/CSM_1B_VERIFICATION.md)
+- [4-Layer Architecture](production/4_LAYER_ARCHITECTURE_VERIFICATION.md)
+- [Cleanup Summary](production/CLEANUP_COMPLETE.md)
+- [Implementation Status](production/IMPLEMENTATION_COMPLETE.md)
 
----
+## 🔒 Safety & Compliance
 
-## 📄 **License**
+- HIPAA-compliant architecture
+- Clinical safety protocols
+- Crisis detection and intervention
+- Privacy protection systems
+- Audit trails and monitoring
 
-This project is licensed under the MIT License with additional clinical safety clauses. See [LICENSE](LICENSE) for details.
+## 🤝 Contributing
 
-### **Clinical Use Notice**
-This software is designed for research and therapeutic support purposes. Clinical use requires proper licensing, clinical supervision, and adherence to local healthcare regulations.
+Please read our contributing guidelines before submitting PRs.
 
----
+## 📄 License
 
-## 🙏 **Acknowledgments**
+[License information]
 
-### **Clinical Collaborators**
-- Mental health professionals providing therapeutic validation
-- Cultural consultants ensuring cross-cultural appropriateness
-- Ethics committees guiding clinical safety protocols
+## 🙏 Acknowledgments
 
-### **Technical Contributors**
-- AI researchers advancing therapeutic AI capabilities
-- Open-source community providing foundational models
-- Cloud infrastructure providers enabling scalable deployment
-
-### **Research Partners**
-- Academic institutions validating clinical effectiveness
-- Healthcare organizations testing real-world deployment
-- Regulatory bodies ensuring compliance standards
+- Sesame AI for CSM-1B model
+- Hugging Face for model hosting
+- All open-source contributors
 
 ---
 
-## 📞 **Contact & Support**
-
-### **Clinical Support**
-- **Clinical Oversight**: clinical@oviya-ei.org
-- **Safety Reporting**: safety@oviya-ei.org
-- **Ethics Committee**: ethics@oviya-ei.org
-
-### **Technical Support**
-- **GitHub Issues**: [Report bugs and request features](https://github.com/your-repo/oviya-ei/issues)
-- **Documentation**: [Technical documentation](https://docs.oviya-ei.org)
-- **Community**: [Discussion forum](https://community.oviya-ei.org)
-
-### **Partnerships**
-- **Clinical Partnerships**: partnerships@oviya-ei.org
-- **Research Collaboration**: research@oviya-ei.org
-- **Enterprise Deployment**: enterprise@oviya-ei.org
-
----
-
-## 🔬 **Research & Publications**
-
-Oviya EI has been featured in several peer-reviewed publications:
-
-- **"Governed Experimental Framework for Therapeutic AI Systems"** - Whitepaper on clinical safety and experimental governance
-- **"Cultural Wisdom Integration in AI Therapeutic Systems"** - Cross-cultural therapeutic adaptation research
-- **"Real-time Voice Synthesis for Therapeutic AI"** - Low-latency conversational AI research
-
-### **Ongoing Research**
-- Advanced emotion recognition and therapeutic response
-- Long-term therapeutic relationship modeling
-- Multi-modal therapeutic interaction (voice + text + video)
-- Cross-cultural therapeutic effectiveness studies
-
----
-
-**Oviya EI represents the future of accessible, clinically-sound therapeutic support through advanced AI. Together, we're building a world where mental health support is available to everyone, everywhere.**
-
----
-
-*Built with ❤️ for mental health and clinical excellence*
-
-**🏆 Enterprise-Grade Therapeutic AI - Clinically Validated, Production Ready**
+**Status**: ✅ Production Ready  
+**Last Updated**: November 2024  
+**Version**: 1.0.0
